@@ -1,0 +1,41 @@
+/my-agent-project/
+├── .asm/                           # The ASM generated "Brain" for the Agent
+│   ├── main_asm.md                 # Root Router: Tells agent about all expertises
+│   │
+│   ├── travel-agency/              # Expertise Namespace: Travel Agency SaaS
+│   │   ├── expertise.toml          # Meta for this expertise (Author, Version, Relational Graph)
+│   │   ├── travel_index.md         # The "Navigation Map" for this specific domain
+│   │   ├── relationships.md        # The "Glue Logic" (How Skill A connects to Skill B)
+│   │   └── skills/
+│   │       ├── async-sql-postgres/
+│   │       │   ├── skill.toml      # Dependency and version metadata
+│   │       │   ├── blueprint.md    # Architectural rules (SOTA Instructions)
+│   │       │   ├── template.py     # SOTA Reference code
+│   │       │   └── pitfalls.md     # Anti-patterns (What NOT to do)
+│   │       └── network-resilience/
+│   │           ├── skill.toml
+│   │           ├── blueprint.md
+│   │           └── client_factory.py
+│   │
+│   └── security-hardened/          # Expertise Namespace: Global Security Layer
+│       ├── expertise.toml
+│       ├── security_index.md
+│       └── skills/
+│           ├── data-encryption/
+│           │   ├── skill.toml
+│           │   ├── blueprint.md
+│           │   └── encryption_util.py
+│           └── auth-validator/
+│               ├── skill.toml
+│               └── middleware_sota.py
+│
+├── asm.toml                        # Project configuration & Expertise selection
+├── asm.lock                        # Deterministic version lock for all skills
+├── pyproject.toml                  # Standard Python dependencies
+├── .claudecode/                    # (Optional) Auto-injected system prompts for IDE Agent
+│   └── asm_integration.md          # Instructions telling Claude to read .asm/main_asm.md
+│
+└── src/                            # Your actual working application code
+    ├── database.py                 # Written by agent following async-sql-postgres SOTA
+    ├── main.py                     # Written by agent following travel-agency patterns
+    └── auth.py                     # Written by agent following security-hardened patterns

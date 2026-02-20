@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asm"
+version = "0.1.0"
+description = "Agent Skill Manager — SOTA expertise for IDE agents"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "tomlkit>=0.12",
+]
+
+[project.scripts]
+asm = "asm.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asm"]
