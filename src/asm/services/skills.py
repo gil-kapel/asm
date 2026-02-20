@@ -1,10 +1,12 @@
-"""Skill service — high-level add / create operations."""
+"""Skill service — high-level add / create / sync operations."""
 
 from __future__ import annotations
 
 import shutil
 import tempfile
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from asm.core import paths
@@ -33,7 +35,7 @@ def add_skill(
 
     emit("Fetching skill…" if source_type == "github" else "Copying from local path…")
     dest_tmp = Path(tempfile.mkdtemp()) / "staging"
-    extra = fetch(source_type, location, dest_tmp)
+    extra = fetch(source_type, location, dest_tmp, root=root)
 
     emit("Validating SKILL.md…")
     ok, msg = validate(dest_tmp)
@@ -96,6 +98,166 @@ def create_skill(
     return skill_dir
 
 
+# ── Sync (like uv sync) ─────────────────────────────────────────────
+
+
+@dataclass
+class SkillSyncEvent:
+    """Progress report for a single skill during sync."""
+
+    name: str
+    action: str  # "verified" | "up_to_date" | "installing" | "installed" | "drift" | "failed"
+    detail: str = ""
+    elapsed_ms: float = 0
+
+
+@dataclass
+class SyncResult:
+    """Summary of a sync_workspace run."""
+
+    installed: list[str] = field(default_factory=list)
+    up_to_date: list[str] = field(default_factory=list)
+    integrity_ok: list[str] = field(default_factory=list)
+    integrity_drift: list[str] = field(default_factory=list)
+    failed: dict[str, str] = field(default_factory=dict)
+    removed_from_lock: list[str] = field(default_factory=list)
+
+
+def sync_workspace(
+    root: Path,
+    on_event: Callable[[SkillSyncEvent], None] | None = None,
+    *,
+    parallel: int = 4,
+) -> SyncResult:
+    """Reconcile .asm/skills/ with asm.toml — install missing, verify existing.
+
+    Fetches missing skills in parallel (up to *parallel* workers).
+    Calls *on_event* for each skill with structured progress updates.
+    """
+    import time
+
+    emit = on_event or (lambda _e: None)
+    result = SyncResult()
+
+    cfg_path = root / paths.ASM_TOML
+    cfg = config.load(cfg_path)
+    lock = lockfile.load(paths.lock_path(root))
+
+    skills_root = paths.skills_dir(root)
+    skills_root.mkdir(parents=True, exist_ok=True)
+
+    to_fetch: list[tuple[str, SkillEntry]] = []
+
+    for name, entry in cfg.skills.items():
+        skill_dir = skills_root / name
+        installed = skill_dir.exists() and (skill_dir / "SKILL.md").exists()
+
+        if installed:
+            locked = lock.get(name)
+            if locked and locked.integrity:
+                t0 = time.monotonic()
+                ok = lockfile.verify(skill_dir, locked.integrity)
+                dt = (time.monotonic() - t0) * 1000
+                if ok:
+                    result.integrity_ok.append(name)
+                    emit(SkillSyncEvent(name, "verified", elapsed_ms=dt))
+                else:
+                    result.integrity_drift.append(name)
+                    emit(SkillSyncEvent(name, "drift", "integrity changed since lock", dt))
+            else:
+                result.up_to_date.append(name)
+                emit(SkillSyncEvent(name, "up_to_date"))
+            continue
+
+        to_fetch.append((name, entry))
+
+    if to_fetch:
+        _parallel_fetch(root, to_fetch, lock, result, emit, parallel)
+
+    stale = set(lock) - set(cfg.skills)
+    for name in stale:
+        del lock[name]
+        result.removed_from_lock.append(name)
+
+    lockfile.save(lock, paths.lock_path(root))
+
+    return result
+
+
+def _parallel_fetch(
+    root: Path,
+    skills: list[tuple[str, SkillEntry]],
+    lock: dict[str, LockEntry],
+    result: SyncResult,
+    emit: Callable[[SkillSyncEvent], None],
+    max_workers: int,
+) -> None:
+    """Fetch multiple skills concurrently."""
+    import threading
+    import time
+
+    lock_mutex = threading.Lock()
+
+    def _do_fetch(name: str, source: str) -> tuple[str, LockEntry | None, str]:
+        """Returns (name, lock_entry_or_None, error_msg)."""
+        try:
+            entry = _fetch_and_install_entry(root, name, source)
+            return name, entry, ""
+        except Exception as exc:
+            return name, None, str(exc)
+
+    workers = min(max_workers, len(skills))
+
+    for name, _ in skills:
+        emit(SkillSyncEvent(name, "installing", parse_source(_.source)[0]))
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_do_fetch, name, entry.source): (name, time.monotonic())
+            for name, entry in skills
+        }
+        for future in as_completed(futures):
+            name, t0 = futures[future]
+            dt = (time.monotonic() - t0) * 1000
+            skill_name, lock_entry, err = future.result()
+
+            if err:
+                result.failed[skill_name] = err
+                emit(SkillSyncEvent(skill_name, "failed", err, dt))
+            else:
+                result.installed.append(skill_name)
+                with lock_mutex:
+                    lock[skill_name] = lock_entry
+                emit(SkillSyncEvent(skill_name, "installed", elapsed_ms=dt))
+
+
+def _fetch_and_install_entry(
+    root: Path, name: str, source: str,
+) -> LockEntry:
+    """Fetch, validate, install a single skill. Returns its LockEntry."""
+    source_type, location = parse_source(source)
+
+    dest_tmp = Path(tempfile.mkdtemp()) / "staging"
+    extra = fetch(source_type, location, dest_tmp, root=root)
+
+    ok, msg = validate(dest_tmp)
+    if not ok:
+        shutil.rmtree(dest_tmp.parent, ignore_errors=True)
+        raise ValueError(f"Validation failed: {msg}")
+
+    meta = extract_meta(dest_tmp)
+    final_dest = _install(dest_tmp, paths.skills_dir(root) / name)
+
+    return LockEntry(
+        name=name,
+        version=meta.version,
+        registry=source_type,
+        integrity=lockfile.compute_integrity(final_dest),
+        resolved=extra.get("resolved", location),
+        commit=extra.get("commit", ""),
+    )
+
+
 # ── Private helpers ─────────────────────────────────────────────────
 
 
@@ -150,11 +312,14 @@ def _register_lock(
 ) -> None:
     lock_file = paths.lock_path(root)
     lock = lockfile.load(lock_file)
+    source_type, location = parse_source(source)
+    meta = extract_meta(skill_dir)
     lock[name] = LockEntry(
         name=name,
-        source=source,
+        version=meta.version,
+        registry=source_type,
         integrity=lockfile.compute_integrity(skill_dir),
-        resolved=extra.get("resolved", ""),
+        resolved=extra.get("resolved", location),
         commit=extra.get("commit", ""),
     )
     lockfile.save(lock, lock_file)

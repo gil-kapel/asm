@@ -21,6 +21,7 @@ class SkillMeta:
     """Metadata extracted from SKILL.md YAML frontmatter."""
     name: str
     description: str
+    version: str = "0.0.0"
 
 
 @dataclass
@@ -33,11 +34,31 @@ class SkillEntry:
 @dataclass
 class LockEntry:
     """A pinned skill in asm.lock."""
-    name: str
-    source: str
-    integrity: str
-    resolved: str = ""
-    commit: str = ""
+
+    name: str = field(metadata={
+        "description": "Unique skill identifier (kebab-case). "
+        "Set once during `asm add`; rename via `asm remove` + `asm add --name`.",
+    })
+    version: str = field(metadata={
+        "description": "Semver from SKILL.md frontmatter. "
+        "Changes on `asm sync` when the upstream skill bumps its version.",
+    })
+    registry: str = field(metadata={
+        "description": "Source registry: 'github' | 'local' | 'smithery'. "
+        "Immutable after install — determined by the source URL scheme.",
+    })
+    integrity: str = field(metadata={
+        "description": "SHA-256 content hash (sha256:<hex>) of the installed skill tree. "
+        "Recomputed automatically on every `asm sync` or `asm add`.",
+    })
+    resolved: str = field(default="", metadata={
+        "description": "Canonical URL or filesystem path without the registry prefix. "
+        "Updated on `asm sync` if the upstream location changes.",
+    })
+    commit: str = field(default="", metadata={
+        "description": "Git commit SHA pinning the exact revision (github registry only). "
+        "Advances on `asm sync`; empty for local/smithery skills.",
+    })
 
 
 # ── Project layer ───────────────────────────────────────────────────

@@ -151,35 +151,61 @@ def create_expertise(skills_list: tuple[str, ...], desc: str, root: str) -> None
 
 @cli.command()
 @click.option(
-    "--agent", "agent_name", default=None,
-    type=click.Choice(integrations.AGENTS, case_sensitive=False),
-    help="Sync only this agent (default: auto-detect all).",
-)
-@click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     help="Project root directory.",
 )
-def sync(agent_name: str | None, root: str) -> None:
-    """Sync .asm/ skills into IDE agent config files.
+def sync(root: str) -> None:
+    """Install missing skills from asm.toml and sync agent configs.
 
-    Auto-detects agents present in the workspace, or use --agent to
-    target a specific one.
+    Reads the [skills] table, fetches anything not on disk, verifies
+    integrity of existing installs, regenerates main_asm.md, and syncs
+    IDE agent integration files.
+
+    Like `uv sync` — run after cloning a repo or pulling changes.
     """
-    from asm.repo import config
+    import time
+
+    from asm.services import bootstrap, skills
+    from asm.services.skills import SkillSyncEvent
 
     root_path = _require_workspace(root)
-    cfg = config.load(root_path / paths.ASM_TOML)
-    targets = _resolve_sync_targets(root_path, cfg, agent_name)
 
-    if not targets:
-        click.echo("No agents detected. Use --agent to specify one explicitly.")
-        return
+    def _on_event(ev: SkillSyncEvent) -> None:
+        ms = f" ({ev.elapsed_ms:.0f}ms)" if ev.elapsed_ms else ""
+        match ev.action:
+            case "verified":
+                click.echo(f"  ✔ {ev.name}{ms}")
+            case "up_to_date":
+                click.echo(f"  ✔ {ev.name} (no lock entry)")
+            case "drift":
+                click.echo(f"  ⚠ {ev.name}: integrity drift{ms}")
+            case "installing":
+                click.echo(f"  ↓ {ev.name} ({ev.detail})…")
+            case "installed":
+                click.echo(f"  ✔ {ev.name} installed{ms}")
+            case "failed":
+                click.echo(f"  ✗ {ev.name}: {ev.detail}{ms}")
 
-    results = integrations.sync_all(root_path, cfg, targets)
-    for name, dest in results.items():
-        rel = dest.relative_to(root_path) if dest.is_relative_to(root_path) else dest
-        click.echo(f"✔ Synced {name} → {rel}")
+    t0 = time.monotonic()
+    result = skills.sync_workspace(root_path, on_event=_on_event)
+    dt = time.monotonic() - t0
+
+    if result.removed_from_lock:
+        click.echo(f"  • pruned {len(result.removed_from_lock)} stale lockfile entries")
+
+    bootstrap.regenerate(root_path)
+    _auto_sync(root_path)
+
+    total = (
+        len(result.installed) + len(result.up_to_date)
+        + len(result.integrity_ok) + len(result.integrity_drift)
+    )
+    failed = len(result.failed)
+    summary = f"Synced {total} skill(s) in {dt:.1f}s"
+    if failed:
+        summary += f", {failed} failed"
+    click.echo(summary)
 
 
 # ── helpers ─────────────────────────────────────────────────────────

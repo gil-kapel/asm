@@ -27,13 +27,14 @@ def parse_source(raw: str) -> tuple[str, str]:
     return "github", raw
 
 
-def fetch(source_type: str, location: str, dest: Path) -> dict:
+def fetch(source_type: str, location: str, dest: Path, *, root: Path | None = None) -> dict:
     """Dispatch to the appropriate fetcher.
 
+    *root* is passed to local fetcher for resolving relative paths.
     Returns a dict with optional keys: commit, resolved.
     """
     if source_type == "local":
-        local.fetch(location, dest)
+        local.fetch(location, dest, root=root)
         return {}
 
     if source_type == "github":

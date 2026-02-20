@@ -105,22 +105,28 @@ asm create skill db-layer "Async SQLAlchemy repository pattern" --from ./src/dat
 
 Source files are analysed and placed into `scripts/` (`.py`, `.sh`) or `references/` (everything else).
 
-## Agent Integration
-
-ASM skills live in `.asm/`, but each IDE agent reads its own config location. The `sync` command bridges them.
-
-### Auto-sync
-
-Every `asm add skill` and `asm create skill` automatically syncs detected agents. No manual step needed.
-
-### Manual sync
+### Sync workspace
 
 ```bash
-asm sync                  # auto-detect and sync all agents
-asm sync --agent cursor   # sync only Cursor
-asm sync --agent claude   # sync only Claude Code
-asm sync --agent codex    # sync only Codex CLI
+asm sync
 ```
+
+Like `uv sync` — reads `asm.toml` and reconciles your `.asm/skills/` directory:
+
+- **Missing skills** are fetched from their declared source (GitHub / local)
+- **Existing skills** are verified against their `asm.lock` integrity hash
+- **Stale lockfile entries** (removed from `asm.toml`) are pruned
+- After installing, `main_asm.md` is regenerated and agent configs are synced
+
+This is the team onboarding command:
+
+```bash
+git clone <repo> && cd <repo> && asm sync
+```
+
+## Agent Integration
+
+ASM skills live in `.asm/`, but each IDE agent reads its own config location. Agent configs are synced automatically after every `asm add skill`, `asm create skill`, and `asm sync`.
 
 ### What gets generated
 
@@ -146,9 +152,9 @@ When `[agents]` is configured, only those set to `true` are synced.
 ## How it works
 
 ```
-asm.toml          Declares which skills are active
-asm.lock          Pins integrity hashes for reproducibility
-.asm/main_asm.md  Root document — instructs the agent to follow installed skills
+asm.toml          Declares which skills are active + their sources
+asm.lock          Pins SHA-256 integrity hashes for reproducibility
+.asm/main_asm.md  Root document — agents read this first
 .asm/skills/      Each skill is a self-contained SKILL.md package
 ```
 
@@ -177,6 +183,15 @@ description: One-line explanation used for agent triggering
 
 `name` must be kebab-case. Both `name` and `description` are required.
 
+### The sync lifecycle
+
+```
+asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
+                      ──► asm.lock           (verify / update hashes)
+                      ──► main_asm.md        (regenerate index)
+                      ──► agent configs      (Cursor / Claude / Codex)
+```
+
 ## CLI Reference
 
 | Command | Description |
@@ -185,8 +200,7 @@ description: One-line explanation used for agent triggering
 | `asm add skill <source>` | Install a skill from GitHub or local path |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
-| `asm sync` | Sync skills into IDE agent configs (auto-detects agents) |
-| `asm sync --agent <name>` | Sync a specific agent (`cursor`, `claude`, `codex`) |
+| `asm sync` | Install missing skills, verify integrity, sync agent configs |
 | `asm create expertise <skills...> --desc <desc>` | Bundle skills into a domain *(coming soon)* |
 | `asm --version` | Print version |
 
@@ -199,7 +213,7 @@ uv sync
 uv run asm --version
 ```
 
-The CLI entry point is `src/asm/cli.py`, registered as `asm` via `pyproject.toml`:
+The CLI entry point is `src/asm/cli/__init__.py`, registered as `asm` via `pyproject.toml`:
 
 ```toml
 [project.scripts]

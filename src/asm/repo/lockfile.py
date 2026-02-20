@@ -40,7 +40,8 @@ def dump(entries: dict[str, LockEntry]) -> str:
     skills_super = tomlkit.table(is_super_table=True)
     for name, entry in sorted(entries.items()):
         tbl = tomlkit.table()
-        tbl.add("source", entry.source)
+        tbl.add("version", entry.version)
+        tbl.add("registry", entry.registry)
         tbl.add("integrity", entry.integrity)
         if entry.resolved:
             tbl.add("resolved", entry.resolved)
@@ -63,7 +64,8 @@ def load(path: Path) -> dict[str, LockEntry]:
     for name, meta in skills_raw.items():
         entries[name] = LockEntry(
             name=name,
-            source=meta.get("source", ""),
+            version=meta.get("version", "0.0.0"),
+            registry=meta.get("registry", ""),
             integrity=meta.get("integrity", ""),
             resolved=meta.get("resolved", ""),
             commit=meta.get("commit", ""),
