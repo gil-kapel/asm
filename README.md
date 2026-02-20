@@ -7,13 +7,13 @@ ASM manages a `.asm/` directory in your project — a structured skill library t
 ## Install
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/your-org/asm/main/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/install.sh | sh
 ```
 
 Or with `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/your-org/asm/main/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/gil-kapel/asm/install.sh | sh
 ```
 
 The script detects your system, installs [uv](https://docs.astral.sh/uv/) if needed, clones the repo, and makes the `asm` command available globally. No sudo required.
@@ -25,7 +25,7 @@ The script detects your system, installs [uv](https://docs.astral.sh/uv/) if nee
 If you prefer doing it yourself:
 
 ```bash
-git clone https://github.com/your-org/asm.git ~/.asm-cli
+git clone https://github.com/gil-kapel/asm.git ~/.asm-cli
 uv tool install -e ~/.asm-cli
 ```
 
@@ -193,7 +193,7 @@ description: One-line explanation used for agent triggering
 ## Development
 
 ```bash
-git clone https://github.com/your-org/asm.git
+git clone https://github.com/gil-kapel/asm.git
 cd asm
 uv sync
 uv run asm --version

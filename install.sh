@@ -1,9 +1,9 @@
 #!/bin/sh
 # ASM — Agent Skill Manager installer
-# Usage: curl -LsSf https://raw.githubusercontent.com/your-org/asm/main/install.sh | sh
+# Usage: curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/install.sh | sh
 set -eu
 
-ASM_REPO="https://github.com/your-org/asm.git"
+ASM_REPO="https://github.com/gil-kapel/asm.git"
 ASM_HOME="${ASM_HOME:-$HOME/.asm-cli}"
 MIN_PYTHON="3.10"
 
