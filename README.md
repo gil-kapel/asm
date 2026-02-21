@@ -1,5 +1,36 @@
 # ASM — Agent Skill Manager
 
+## Copy Prompt For Your Agent
+
+```text
+Set up ASM in this project end-to-end.
+
+ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent config (Cursor/Claude/Codex).
+
+1) Install ASM:
+   curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
+
+2) Initialize ASM in the current project root:
+   asm init
+
+3) Discover the most relevant skills for this codebase:
+   - infer stack/language/framework from the repo
+   - run asm search with focused queries
+   - pick top relevant skills only
+
+4) Install the selected skills:
+   - use the `source` field from asm search results
+   - run asm add skill <source> for each selected skill
+
+5) Sync integrations:
+   asm sync
+
+6) Output:
+   - list installed skills
+   - show which agent integration was synced (cursor/claude/codex)
+   - report any provider/source failures and the fallback used
+```
+
 A CLI that gives your IDE agent (Cursor, Claude Code, Aider) **SOTA expertise** instead of average training data.
 
 ASM manages a `.asm/` directory in your project — a structured skill library that agents read before every task. Think `npm` for agent knowledge: install curated skills from GitHub, scaffold your own, and bundle them into domain expertises.
