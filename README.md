@@ -105,7 +105,7 @@ asm create skill db-layer "Async SQLAlchemy repository pattern" --from ./src/dat
 
 Source files are analysed and placed into `scripts/` (`.py`, `.sh`) or `references/` (everything else).
 
-### Sync workspace
+    12 $$### Sync workspace
 
 ```bash
 asm sync
@@ -122,6 +122,75 @@ This is the team onboarding command:
 
 ```bash
 git clone <repo> && cd <repo> && asm sync
+```
+
+### Team registry versioning flow
+
+Use this flow when your team imports a base skill, customizes it locally, and manages versions in your own registry.
+
+```bash
+# 1) Import from upstream registry/source
+asm add skill https://github.com/github/awesome-copilot/tree/main/skills/refactor
+
+# 2) Edit the local working tree
+$EDITOR .asm/skills/refactor/SKILL.md
+
+# 3) Save WIP without creating a new local revision
+asm skill stash push refactor -m "wip: adjust prompts for team style"
+
+# 4) Restore WIP later
+asm skill stash apply refactor
+
+# 5) Create a local version revision
+asm skill commit refactor -m "team: add stricter refactor checklist"
+
+# 6) Add a human tag for release workflows
+asm skill tag refactor team-v1
+
+# 7) Roll backward/forward by tag or snapshot id
+asm skill checkout refactor team-v1
+asm skill checkout refactor <snapshot_id>
+
+# 8) Inspect version timeline
+asm skill history refactor
+```
+
+### Single-user local registry flow
+
+Use this when one developer manages personal variants in a local filesystem registry/workspace.
+
+```bash
+# 1) Create/import your base skill
+asm create skill prompt-tuning "Personal prompt refinement patterns"
+# or: asm add skill ./my-local-skill
+
+# 2) Iterate locally
+$EDITOR .asm/skills/prompt-tuning/SKILL.md
+
+# 3) Save temporary experiments
+asm skill stash push prompt-tuning -m "wip: experiment with shorter instructions"
+
+# 4) Commit a personal version
+asm skill commit prompt-tuning -m "me: stable concise prompt style"
+
+# 5) Tag your own milestones
+asm skill tag prompt-tuning me-v1
+
+# 6) Jump between known-good versions
+asm skill checkout prompt-tuning me-v1
+asm skill history prompt-tuning
+```
+
+Version model used by ASM lock entries:
+- `upstream_version`: version coming from the imported/origin skill.
+- `local_revision`: monotonic team/user revision in your registry.
+- `registry`/`registry_id`: where ownership of the local evolution lives.
+- `origin_registry`/`origin_ref`: immutable provenance of the first import.
+
+If your repo has older lockfiles, run migration once:
+
+```bash
+asm lock migrate
 ```
 
 ## Agent Integration
@@ -201,6 +270,13 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
 | `asm sync` | Install missing skills, verify integrity, sync agent configs |
+| `asm skill commit <name> -m <msg>` | Create a new local skill revision |
+| `asm skill stash push <name> [-m <msg>]` | Save WIP snapshot without version bump |
+| `asm skill stash apply <name> [stash_id]` | Restore a stashed snapshot |
+| `asm skill tag <name> <tag> [ref]` | Assign a tag to HEAD or a snapshot ref |
+| `asm skill checkout <name> <ref>` | Materialize a tagged/snapshotted version |
+| `asm skill history <name>` | Show recent version history for a skill |
+| `asm lock migrate` | Upgrade `asm.lock` schema in place |
 | `asm create expertise <skills...> --desc <desc>` | Bundle skills into a domain *(coming soon)* |
 | `asm --version` | Print version |
 

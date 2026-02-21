@@ -55,7 +55,7 @@ def add() -> None:
     help="Project root directory.",
 )
 def add_skill(source: str, name: str | None, root: str) -> None:
-    """Fetch a skill from GitHub, local path, or Smithery.
+    """Fetch a skill from GitHub, local path, or a registry prefix.
 
     SOURCE can be:
 
@@ -65,6 +65,8 @@ def add_skill(source: str, name: str | None, root: str) -> None:
       https://github.com/u/r/tree/b/p   Full GitHub URL
       local:./path                      Explicit local prefix
       github:user/repo/path             Explicit GitHub prefix
+      smithery:namespace/skill          Smithery registry reference
+      playbooks:namespace/skill         Playbooks registry reference
     """
     from asm.services import bootstrap, skills
 
@@ -206,6 +208,232 @@ def sync(root: str) -> None:
     if failed:
         summary += f", {failed} failed"
     click.echo(summary)
+
+
+# ── skill versioning ────────────────────────────────────────────────
+
+
+@cli.group("skill")
+def skill_group() -> None:
+    """Manage local skill versions and snapshots."""
+
+
+@skill_group.command("commit")
+@click.argument("name")
+@click.option("-m", "--message", required=True, help="Commit message.")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_commit(name: str, message: str, root: str) -> None:
+    """Commit local changes of a skill."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        entry = skills.skill_commit(root_path, name, message)
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"✔ Committed {name} r{entry.local_revision}")
+    click.echo(f"  snapshot: {entry.snapshot_id}")
+
+
+@skill_group.group("stash")
+def skill_stash_group() -> None:
+    """Save/apply temporary working snapshots."""
+
+
+@skill_stash_group.command("push")
+@click.argument("name")
+@click.option("-m", "--message", default="", help="Optional stash note.")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_stash_push(name: str, message: str, root: str) -> None:
+    """Stash current skill working tree."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        stash_id = skills.skill_stash_push(root_path, name, message)
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"✔ Stashed {name}: {stash_id}")
+
+
+@skill_stash_group.command("apply")
+@click.argument("name")
+@click.argument("stash_id", required=False)
+@click.option("--pop", is_flag=True, help="Drop stash after applying.")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_stash_apply(name: str, stash_id: str | None, pop: bool, root: str) -> None:
+    """Apply latest (or selected) stash for a skill."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        entry = skills.skill_stash_apply(root_path, name, stash_id, pop=pop)
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"✔ Applied stash to {name}")
+    click.echo(f"  snapshot: {entry.snapshot_id}")
+
+
+@skill_group.command("tag")
+@click.argument("name")
+@click.argument("tag")
+@click.argument("ref", required=False, default="HEAD")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_tag(name: str, tag: str, ref: str, root: str) -> None:
+    """Tag a skill snapshot (default: HEAD)."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        snapshot_id = skills.skill_tag(root_path, name, tag, ref)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"✔ Tagged {name}:{tag} -> {snapshot_id}")
+
+
+@skill_group.command("checkout")
+@click.argument("name")
+@click.argument("ref")
+@click.option("--force", is_flag=True, help="Discard uncommitted local changes.")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_checkout(name: str, ref: str, force: bool, root: str) -> None:
+    """Checkout a snapshot/tag into working skill dir."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        entry = skills.skill_checkout(root_path, name, ref, force=force)
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"✔ Checked out {name} -> {entry.snapshot_id}")
+    click.echo(f"  local revision: r{entry.local_revision}")
+
+
+@skill_group.command("history")
+@click.argument("name")
+@click.option("--limit", default=20, type=int, show_default=True)
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_history(name: str, limit: int, root: str) -> None:
+    """Show recent commit/import history for a skill."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    entries = skills.skill_history(root_path, name, limit=limit)
+    if not entries:
+        click.echo("No history yet.")
+        return
+    for item in entries:
+        click.echo(
+            f"{item.get('created_at', '')} {item.get('kind', 'commit')} "
+            f"r{item.get('local_revision', 0)} {item.get('snapshot_id', '')} "
+            f"- {item.get('message', '')}",
+        )
+
+
+@skill_group.command("status")
+@click.argument("name")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_status(name: str, root: str) -> None:
+    """Show unstaged changes for a skill."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        status = skills.skill_status(root_path, name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"Skill: {status.name}")
+    click.echo(f"Baseline snapshot: {status.snapshot_id}")
+    if status.clean:
+        click.echo("Working tree clean")
+        return
+
+    for rel in status.added:
+        click.echo(f"A  {rel}")
+    for rel in status.modified:
+        click.echo(f"M  {rel}")
+    for rel in status.removed:
+        click.echo(f"D  {rel}")
+
+
+@skill_group.command("diff")
+@click.argument("name")
+@click.argument("rel_path", required=False)
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def skill_diff(name: str, rel_path: str | None, root: str) -> None:
+    """Show unstaged unified diff for a skill (optionally one file)."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        diff_text = skills.skill_diff(root_path, name, rel_path=rel_path)
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if not diff_text:
+        click.echo("No unstaged changes")
+        return
+    click.echo(diff_text)
+
+
+# ── lock ─────────────────────────────────────────────────────────────
+
+
+@cli.group("lock")
+def lock_group() -> None:
+    """Manage asm.lock schema/versioning."""
+
+
+@lock_group.command("migrate")
+@click.option("--registry-id", default="default", show_default=True)
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory.",
+)
+def lock_migrate(registry_id: str, root: str) -> None:
+    """Migrate asm.lock to the current lock schema."""
+    from asm.repo import lockfile
+
+    root_path = _require_workspace(root)
+    changed = lockfile.migrate(paths.lock_path(root_path), registry_id=registry_id)
+    if changed:
+        click.echo("✔ Migrated asm.lock")
+    else:
+        click.echo("asm.lock already up to date")
 
 
 # ── helpers ─────────────────────────────────────────────────────────
