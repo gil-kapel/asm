@@ -1,5 +1,22 @@
 # ASM — Agent Skill Manager
 
+
+<p align="center">
+  <img src="assets/asm-logo.svg" alt="ASM logo" width="250" />
+</p>
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![CLI Click](https://img.shields.io/badge/cli-click-0ea5e9)](https://click.palletsprojects.com/)
+[![Package Manager uv](https://img.shields.io/badge/package_manager-uv-7c3aed)](https://docs.astral.sh/uv/)
+
+ASM manages a project-local `.asm/` skill graph and syncs it into Cursor / Claude / Codex.
+
+- **Install curated skills** from GitHub, Smithery, and Playbooks
+- **Lock reproducibility** with `asm.lock` integrity hashes
+- **Sync context automatically** to active coding agent configs
+
+[Quick Start](#quick-start) · [Usage](#usage) · [Agent Integration](#agent-integration) · [CLI Reference](#cli-reference)
+
 ## Copy Prompt For Your Agent
 
 ```text
@@ -31,9 +48,22 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
    - report any provider/source failures and the fallback used
 ```
 
-A CLI that gives your IDE agent (Cursor, Claude Code, Aider) **SOTA expertise** instead of average training data.
+## Quick Start
 
-ASM manages a `.asm/` directory in your project — a structured skill library that agents read before every task. Think `npm` for agent knowledge: install curated skills from GitHub, scaffold your own, and bundle them into domain expertises.
+```bash
+# 1) Install ASM
+curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
+
+# 2) Initialize in your project
+asm init
+
+# 3) Find and add relevant skills
+asm search "your stack or problem" --limit 5
+asm add skill <source>
+
+# 4) Sync into active agent context
+asm sync
+```
 
 ## Install
 
