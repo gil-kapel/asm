@@ -12,3 +12,11 @@ wheels/
 .cursor
 *.lock
 asm.toml
+DS_Store
+launch.json
+.env
+context_management/
+docs/
+CLAUDE.md
+AGENTS.md   
+STATE.md

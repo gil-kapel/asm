@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "description": "ASM curated skill index. Entries scored >= 0.7 are verified.",
+  "skills": [
+    {
+      "name": "refactor",
+      "description": "Surgical code refactoring to improve maintainability without changing behavior. Before/after patterns, code smell detection, extract-method workflows.",
+      "source": "github:https://github.com/github/awesome-copilot/tree/main/skills/refactor",
+      "quality_score": 0.9,
+      "verified": true,
+      "tags": ["refactoring", "code-quality", "design-patterns", "maintainability"],
+      "use_when": "Refactoring code, improving structure, addressing code smells, extracting functions or classes"
+    },
+    {
+      "name": "sqlmodel-database",
+      "description": "SQLModel schema design with sync/async patterns, relationship mapping, and MissingGreenlet prevention for FastAPI.",
+      "source": "github:https://github.com/mjunaidca/mjs-agent-skills/tree/main/docs/taskflow-vault/skills/engineering/sqlmodel-database",
+      "quality_score": 0.85,
+      "verified": true,
+      "tags": ["sqlmodel", "fastapi", "async", "database", "pydantic"],
+      "use_when": "Creating SQLModel schemas, FastAPI database operations, async database access patterns"
+    },
+    {
+      "name": "python-testing",
+      "description": "Python testing with pytest: TDD workflows, fixtures, mocking, parametrization, async testing, and coverage.",
+      "source": "github:https://github.com/affaan-m/everything-claude-code/tree/main/skills/python-testing",
+      "quality_score": 0.85,
+      "verified": true,
+      "tags": ["pytest", "testing", "tdd", "python", "fixtures"],
+      "use_when": "Writing Python tests, setting up test infrastructure, TDD workflows, mocking patterns"
+    },
+    {
+      "name": "python-packaging",
+      "description": "Python packaging with pyproject.toml, distribution patterns, CLI entry points, and PyPI publishing workflows.",
+      "source": "github:https://github.com/wshobson/agents/tree/main/plugins/python-development/skills/python-packaging",
+      "quality_score": 0.85,
+      "verified": true,
+      "tags": ["python", "packaging", "pypi", "pyproject.toml", "distribution"],
+      "use_when": "Packaging Python libraries, publishing to PyPI, creating distributable CLI tools"
+    },
+    {
+      "name": "sql",
+      "description": "SQL mastery: schema design, query optimization, NULL traps, index killers, migration patterns across PostgreSQL/MySQL/SQLite.",
+      "source": "playbooks:https://playbooks.com/skills/openclaw/skills/sql",
+      "quality_score": 0.8,
+      "verified": true,
+      "tags": ["sql", "database", "performance", "migrations"],
+      "use_when": "Writing SQL queries, designing schemas, optimizing database performance, running migrations"
+    },
+    {
+      "name": "skill-development",
+      "description": "Creating effective agent skills: structure, progressive disclosure, trigger design, and SKILL.md best practices.",
+      "source": "github:https://github.com/anthropics/claude-code/tree/main/plugins/plugin-dev/skills/skill-development",
+      "quality_score": 0.8,
+      "verified": true,
+      "tags": ["meta-skill", "skill-creation", "documentation", "progressive-disclosure"],
+      "use_when": "Creating new agent skills, improving skill structure, understanding SKILL.md format"
+    },
+    {
+      "name": "building-clis",
+      "description": "Multi-language CLI construction with Python (Typer/Click), Go (Cobra), and Rust (Clap). Argument parsing, subcommands, output formatting.",
+      "source": "playbooks:ancoleman/ai-design-components/building-clis",
+      "quality_score": 0.8,
+      "verified": true,
+      "tags": ["cli", "python", "go", "rust", "typer", "cobra"],
+      "use_when": "Building CLI tools, implementing command-line interfaces in Python/Go/Rust"
+    },
+    {
+      "name": "logo-design-guide",
+      "description": "Logo design principles with AI image generation: prompting strategies, scalability rules, iteration workflows.",
+      "source": "smithery:inferencesh/logo-design-guide",
+      "quality_score": 0.8,
+      "verified": true,
+      "tags": ["logo-design", "ai-generation", "branding", "visual-design"],
+      "use_when": "Creating logos, designing brand marks, generating AI images for visual identity"
+    },
+    {
+      "name": "shadcn-ui",
+      "description": "shadcn/ui integration guide: component installation, Tailwind customization, theming, and composition patterns for React.",
+      "source": "github:https://github.com/google-labs-code/stitch-skills/tree/main/skills/shadcn-ui",
+      "quality_score": 0.8,
+      "verified": true,
+      "tags": ["shadcn-ui", "react", "components", "ui-library", "tailwind"],
+      "use_when": "Integrating shadcn/ui components, customizing React UI, building Tailwind-based interfaces"
+    },
+    {
+      "name": "cli-ux-designer",
+      "description": "CLI/TUI UX patterns: command structure, visual hierarchy, accessibility, spinner/progress design, error presentation.",
+      "source": "smithery:sjungling/cli-ux-designer",
+      "quality_score": 0.75,
+      "verified": true,
+      "tags": ["cli-design", "ux", "accessibility", "terminal"],
+      "use_when": "Designing CLI interfaces, improving command UX, reviewing CLI usability"
+    },
+    {
+      "name": "cli-builder",
+      "description": "TypeScript CLI construction with Bun: argument parsing, subcommand patterns, output formatting, distribution.",
+      "source": "github:https://github.com/joelhooks/swarm-tools/tree/main/packages/opencode-swarm-plugin/global-skills/cli-builder",
+      "quality_score": 0.7,
+      "verified": true,
+      "tags": ["cli", "typescript", "bun", "tooling"],
+      "use_when": "Creating TypeScript CLIs with Bun, building developer tools"
+    },
+    {
+      "name": "create-cli",
+      "description": "CLI specification design: arguments, flags, subcommands, help text, output formats. Spec-first before implementation.",
+      "source": "github:https://github.com/steipete/agent-scripts/tree/main/skills/create-cli",
+      "quality_score": 0.7,
+      "verified": true,
+      "tags": ["cli-design", "interface-design", "specifications"],
+      "use_when": "Designing CLI specs before implementation, planning command-line interface surface area"
+    },
+    {
+      "name": "make-skill-template",
+      "description": "Scaffold new agent skills from a template: frontmatter, instructions, examples sections, and validation checklist.",
+      "source": "github:https://github.com/github/awesome-copilot/tree/main/skills/make-skill-template",
+      "quality_score": 0.7,
+      "verified": true,
+      "tags": ["meta-skill", "skill-creation", "templates", "scaffolding"],
+      "use_when": "Creating new skills from templates, scaffolding SKILL.md packages"
+    },
+    {
+      "name": "cli-ux",
+      "description": "Click-specific CLI UX patterns: prompts, help text, progress bars, error handling, and output formatting.",
+      "source": "local:.asm/skills/cli-ux",
+      "quality_score": 0.7,
+      "verified": true,
+      "tags": ["cli", "click", "python", "ux-patterns"],
+      "use_when": "Designing Python Click CLIs, improving CLI prompts and error handling"
+    },
+    {
+      "name": "llm-structured-output",
+      "description": "LLM API calls with typed responses using LiteLLM, JSON schema, response_format, and Pydantic models.",
+      "source": "local:.asm/skills/llm-structured-output",
+      "quality_score": 0.7,
+      "verified": true,
+      "tags": ["llm", "structured-output", "litellm", "pydantic"],
+      "use_when": "Calling LLM APIs with typed responses, parsing tool calls, building structured LLM workflows"
+    }
+  ]
+}

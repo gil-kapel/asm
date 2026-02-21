@@ -26,9 +26,11 @@ def extract_meta(skill_dir: Path) -> SkillMeta:
     fm = match.group(1)
     name_m = re.search(r"^name:\s*(.+)$", fm, re.MULTILINE)
     desc_m = re.search(r"^description:\s*(.+)$", fm, re.MULTILINE)
+    ver_m = re.search(r"^version:\s*(.+)$", fm, re.MULTILINE)
 
     name = name_m.group(1).strip() if name_m else ""
     description = desc_m.group(1).strip() if desc_m else ""
+    version = ver_m.group(1).strip() if ver_m else "0.0.0"
 
     if not description:
         block = re.search(
@@ -39,7 +41,7 @@ def extract_meta(skill_dir: Path) -> SkillMeta:
                 line.strip() for line in block.group(1).splitlines() if line.strip()
             )
 
-    return SkillMeta(name=name, description=description)
+    return SkillMeta(name=name, description=description, version=version)
 
 
 def validate(skill_dir: Path) -> tuple[bool, str]:

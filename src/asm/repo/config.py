@@ -33,7 +33,8 @@ def dump(cfg: AsmConfig) -> str:
     proj = tomlkit.table()
     proj.add("name", cfg.project.name)
     proj.add("version", cfg.project.version)
-    proj.add("description", cfg.project.description)
+    if cfg.project.description:
+        proj.add("description", cfg.project.description)
     doc.add("project", proj)
 
     asm = tomlkit.table()
@@ -50,16 +51,19 @@ def dump(cfg: AsmConfig) -> str:
     expertises = tomlkit.table()
     for name, ref in cfg.expertises.items():
         row = tomlkit.inline_table()
-        row.append("description", ref.description)
-        row.append("skills", ref.skills)
+        if ref.description:
+            row.append("description", ref.description)
+        if ref.skills:
+            row.append("skills", ref.skills)
         expertises.add(name, row)
     doc.add("expertises", expertises)
 
-    agents = tomlkit.table()
-    agents.add("cursor", cfg.agents.cursor)
-    agents.add("claude", cfg.agents.claude)
-    agents.add("codex", cfg.agents.codex)
-    doc.add("agents", agents)
+    if cfg.agents.cursor or cfg.agents.claude or cfg.agents.codex:
+        agents = tomlkit.table()
+        agents.add("cursor", cfg.agents.cursor)
+        agents.add("claude", cfg.agents.claude)
+        agents.add("codex", cfg.agents.codex)
+        doc.add("agents", agents)
 
     return tomlkit.dumps(doc)
 

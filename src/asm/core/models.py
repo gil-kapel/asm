@@ -21,6 +21,7 @@ class SkillMeta:
     """Metadata extracted from SKILL.md YAML frontmatter."""
     name: str
     description: str
+    version: str = "0.0.0"
 
 
 @dataclass
@@ -32,11 +33,14 @@ class SkillEntry:
 
 @dataclass
 class LockEntry:
-    """A pinned skill in asm.lock."""
-    name: str
-    source: str
-    integrity: str
+
+    upstream_version: str = "0.0.0"
+    local_revision: int = 0
+    registry: str = ""
+    integrity: str = ""
     resolved: str = ""
+    snapshot_id: str = ""
+    parent_snapshot_id: str = ""
     commit: str = ""
 
 
@@ -84,3 +88,21 @@ class AsmConfig:
     skills: dict[str, SkillEntry] = field(default_factory=dict)
     expertises: dict[str, ExpertiseRef] = field(default_factory=dict)
     agents: AgentsConfig = field(default_factory=AgentsConfig)
+
+
+# ── Discovery layer ──────────────────────────────────────────────────
+
+
+@dataclass
+class DiscoveryItem:
+    """Normalized search result across providers."""
+
+    provider: str
+    identifier: str
+    name: str
+    description: str
+    url: str
+    install_source: str
+    stars: int | None = None
+    tags: list[str] = field(default_factory=list)
+    score: float = 0.0
