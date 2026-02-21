@@ -1,4 +1,8 @@
-"""Fetch skills from GitHub repositories."""
+"""Fetch skills from GitHub repositories.
+
+Uses sparse checkout when a subpath is specified to avoid downloading
+the entire repository — typically 10-50x faster than a full clone.
+"""
 
 from __future__ import annotations
 
@@ -39,20 +43,59 @@ def parse_ref(raw: str) -> tuple[str, str, str]:
     raise ValueError(f"Cannot parse GitHub reference: {raw}")
 
 
+def _run(args: list[str], **kwargs) -> subprocess.CompletedProcess:
+    return subprocess.run(args, capture_output=True, text=True, **kwargs)
+
+
+def _sparse_clone(repo_url: str, branch: str, subpath: str, tmp_repo: Path) -> None:
+    """Clone only the needed subpath using sparse checkout + treeless filter."""
+    args = [
+        "git",
+        "clone",
+        "--filter=blob:none",
+        "--no-checkout",
+        "--depth",
+        "1",
+    ]
+    if branch and branch != "HEAD":
+        args.extend(["--branch", branch])
+    args.extend([repo_url, str(tmp_repo)])
+    r = _run(args)
+    if r.returncode != 0:
+        raise RuntimeError(f"git clone failed: {r.stderr.strip()}")
+
+    _run(["git", "-C", str(tmp_repo), "sparse-checkout", "set", subpath])
+    r = _run(["git", "-C", str(tmp_repo), "checkout"])
+    if r.returncode != 0:
+        raise RuntimeError(f"git checkout failed: {r.stderr.strip()}")
+
+
+def _shallow_clone(repo_url: str, branch: str, tmp_repo: Path) -> None:
+    """Full shallow clone (no subpath — need everything)."""
+    args = ["git", "clone", "--depth", "1"]
+    if branch and branch != "HEAD":
+        args.extend(["--branch", branch])
+    args.extend([repo_url, str(tmp_repo)])
+    r = _run(args)
+    if r.returncode != 0:
+        raise RuntimeError(f"git clone failed: {r.stderr.strip()}")
+
+
 def fetch(raw: str, dest: Path) -> str:
-    """Clone a skill from GitHub. Returns the commit hash."""
+    """Clone a skill from GitHub. Returns the commit hash.
+
+    Uses sparse checkout when a subpath is specified — only downloads
+    the blobs for the needed directory.
+    """
     repo_url, branch, subpath = parse_ref(raw)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_repo = Path(tmp) / "repo"
-        result = subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", branch,
-             repo_url, str(tmp_repo)],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"git clone failed: {result.stderr.strip()}")
+
+        if subpath:
+            _sparse_clone(repo_url, branch, subpath, tmp_repo)
+        else:
+            _shallow_clone(repo_url, branch, tmp_repo)
 
         source = tmp_repo / subpath if subpath else tmp_repo
         if not source.exists():
@@ -66,10 +109,5 @@ def fetch(raw: str, dest: Path) -> str:
         if git_dir.exists():
             shutil.rmtree(git_dir)
 
-        result = subprocess.run(
-            ["git", "-C", str(tmp_repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
+        r = _run(["git", "-C", str(tmp_repo), "rev-parse", "HEAD"], check=True)
+        return r.stdout.strip()

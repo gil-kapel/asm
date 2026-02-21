@@ -9,6 +9,9 @@ ASM_TOML = "asm.toml"
 ASM_LOCK = "asm.lock"
 MAIN_ASM_MD = "main_asm.md"
 SKILLS_DIR = "skills"
+OBJECTS_DIR = "objects"
+HISTORY_DIR = "history"
+STASH_DIR = "stash"
 
 
 def resolve_root(start: Path | None = None) -> Path:
@@ -34,3 +37,15 @@ def main_asm_path(root: Path) -> Path:
 
 def lock_path(root: Path) -> Path:
     return root / ASM_LOCK
+
+
+def objects_dir(root: Path) -> Path:
+    return asm_dir(root) / OBJECTS_DIR
+
+
+def history_dir(root: Path) -> Path:
+    return asm_dir(root) / HISTORY_DIR
+
+
+def stash_dir(root: Path) -> Path:
+    return asm_dir(root) / STASH_DIR

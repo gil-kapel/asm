@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from asm.core import paths
-from asm.repo import config
+from asm.repo import config, lockfile
 from asm.templates import render_main_asm
 
 
@@ -27,6 +27,7 @@ def init_workspace(root: Path, name: str | None = None) -> Path:
     paths.skills_dir(root).mkdir(parents=True, exist_ok=True)
 
     config.save(cfg, asm_toml)
+    lockfile.save({}, paths.lock_path(root))
     paths.main_asm_path(root).write_text(render_main_asm(cfg))
 
     return root
