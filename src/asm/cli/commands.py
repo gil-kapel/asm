@@ -487,7 +487,15 @@ def _require_workspace(root_str: str) -> Path:
 
 
 def _resolve_sync_targets(root: Path, cfg, explicit: str | None) -> list[str]:
-    """Determine which agents to sync: explicit flag > [agents] config > auto-detect."""
+    """Determine sync targets by priority.
+
+    Priority:
+      1) explicit flag
+      2) [agents] config
+      3) runtime context inference
+      4) project marker detection
+      5) default to Cursor
+    """
     if explicit:
         return [explicit]
 
@@ -498,7 +506,16 @@ def _resolve_sync_targets(root: Path, cfg, explicit: str | None) -> list[str]:
     if configured:
         return configured
 
-    return integrations.detect_agents(root)
+    runtime_agents = integrations.detect_runtime_agents()
+    if runtime_agents:
+        return runtime_agents
+
+    detected = integrations.detect_agents(root)
+    if detected:
+        return detected
+
+    # Keep first-time UX simple: generate Cursor integration by default.
+    return ["cursor"]
 
 
 def _auto_sync(root: Path) -> None:

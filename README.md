@@ -7,13 +7,13 @@ ASM manages a `.asm/` directory in your project — a structured skill library t
 ## Install
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
 ```
 
 Or with `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/gil-kapel/asm/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
 ```
 
 The script detects your system, installs [uv](https://docs.astral.sh/uv/) if needed, clones the repo, and makes the `asm` command available globally. No sudo required.
@@ -230,9 +230,24 @@ ASM skills live in `.asm/`, but each IDE agent reads its own config location. Ag
 | Claude Code | `CLAUDE.md` | Sentinel-guarded section (preserves your content) |
 | Codex | `AGENTS.md` | Sentinel-guarded section (preserves your content) |
 
-### Auto-detection vs explicit config
+### Context-aware sync vs explicit config
 
-By default, ASM auto-detects agents (`.cursor/` exists? sync Cursor). To lock it down, add an `[agents]` table to `asm.toml`:
+ASM chooses sync targets in this priority:
+
+1. Explicit `[agents]` config in `asm.toml`
+2. Runtime context inference (Cursor/Claude/Codex session signals)
+3. Project marker detection (`.cursor/`, `CLAUDE.md`, `AGENTS.md`)
+4. Fallback to Cursor (creates `.cursor/skills/asm/SKILL.md` if needed)
+
+You can force a one-off runtime context with:
+
+```bash
+ASM_AGENT=cursor asm sync
+ASM_AGENT=claude asm sync
+ASM_AGENT=codex asm sync
+```
+
+To lock it down, add an `[agents]` table to `asm.toml`:
 
 ```toml
 [agents]

@@ -10,6 +10,7 @@ Supported agents:
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -130,6 +131,22 @@ def detect_agents(root: Path) -> list[str]:
     if (root / "CLAUDE.md").exists() or (root / ".claude").is_dir():
         found.append("claude")
     if (root / "AGENTS.md").exists():
+        found.append("codex")
+    return found
+
+
+def detect_runtime_agents() -> list[str]:
+    """Infer active agent context from runtime environment variables."""
+    explicit = os.environ.get("ASM_AGENT", "").strip().lower()
+    if explicit in AGENTS:
+        return [explicit]
+
+    found: list[str] = []
+    if os.environ.get("CURSOR_TRACE_ID") or os.environ.get("CURSOR_SESSION_ID"):
+        found.append("cursor")
+    if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE"):
+        found.append("claude")
+    if os.environ.get("CODEX_HOME"):
         found.append("codex")
     return found
 
