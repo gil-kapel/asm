@@ -49,12 +49,18 @@ def _run(args: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 def _sparse_clone(repo_url: str, branch: str, subpath: str, tmp_repo: Path) -> None:
     """Clone only the needed subpath using sparse checkout + treeless filter."""
-    r = _run([
-        "git", "clone",
-        "--filter=blob:none", "--no-checkout",
-        "--depth", "1", "--branch", branch,
-        repo_url, str(tmp_repo),
-    ])
+    args = [
+        "git",
+        "clone",
+        "--filter=blob:none",
+        "--no-checkout",
+        "--depth",
+        "1",
+    ]
+    if branch and branch != "HEAD":
+        args.extend(["--branch", branch])
+    args.extend([repo_url, str(tmp_repo)])
+    r = _run(args)
     if r.returncode != 0:
         raise RuntimeError(f"git clone failed: {r.stderr.strip()}")
 
@@ -66,10 +72,11 @@ def _sparse_clone(repo_url: str, branch: str, subpath: str, tmp_repo: Path) -> N
 
 def _shallow_clone(repo_url: str, branch: str, tmp_repo: Path) -> None:
     """Full shallow clone (no subpath — need everything)."""
-    r = _run([
-        "git", "clone", "--depth", "1", "--branch", branch,
-        repo_url, str(tmp_repo),
-    ])
+    args = ["git", "clone", "--depth", "1"]
+    if branch and branch != "HEAD":
+        args.extend(["--branch", branch])
+    args.extend([repo_url, str(tmp_repo)])
+    r = _run(args)
     if r.returncode != 0:
         raise RuntimeError(f"git clone failed: {r.stderr.strip()}")
 

@@ -9,6 +9,7 @@ description = "Agent Skill Manager — SOTA expertise for IDE agents"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
+    "httpx>=0.28",
     "tomlkit>=0.12",
 ]
 

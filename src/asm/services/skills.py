@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import re
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -34,12 +35,21 @@ def add_skill(
 
     _guard_duplicate(root, location, name_override)
 
-    emit("Fetching skill…" if source_type == "github" else "Copying from local path…")
+    emit(
+        "Copying from local path…"
+        if source_type == "local"
+        else "Fetching skill…"
+    )
     dest_tmp = Path(tempfile.mkdtemp()) / "staging"
     extra = fetch(source_type, location, dest_tmp, root=root)
 
     emit("Validating SKILL.md…")
     ok, msg = validate(dest_tmp)
+    if not ok and "must be kebab-case" in msg and source_type in {"smithery", "playbooks"}:
+        fallback_name = _derive_registry_name(location)
+        if fallback_name:
+            _rewrite_skill_name(dest_tmp, fallback_name)
+            ok, msg = validate(dest_tmp)
     if not ok:
         shutil.rmtree(dest_tmp.parent, ignore_errors=True)
         raise ValueError(f"Skill validation failed: {msg}")
@@ -51,7 +61,7 @@ def add_skill(
     emit(f"Installing {skill_name}…")
     final_dest = _install(dest_tmp, paths.skills_dir(root) / skill_name)
 
-    source_label = _normalise_source(source_raw, source_type)
+    source_label = extra.get("registry_source") or _normalise_source(source_raw, source_type)
 
     emit("Updating asm.toml…")
     _register_config(root, skill_name, source_label)
@@ -309,9 +319,35 @@ def _install(staging: Path, dest: Path) -> Path:
 
 
 def _normalise_source(raw: str, source_type: str) -> str:
+    if raw.startswith("sm:"):
+        return f"smithery:{raw[3:]}"
+    if raw.startswith("pb:"):
+        return f"playbooks:{raw[3:]}"
+    if raw.startswith("gh:"):
+        return f"github:{raw[3:]}"
     if raw.startswith(("local:", "github:", "smithery:", "playbooks:")):
         return raw
     return f"{source_type}:{raw}"
+
+
+def _derive_registry_name(location: str) -> str:
+    loc = location.strip().rstrip("/")
+    if not loc:
+        return ""
+    if "://" in loc:
+        tail = loc.split("/")[-1]
+    else:
+        tail = loc.split("/")[-1]
+    candidate = re.sub(r"[^a-z0-9-]+", "-", tail.lower()).strip("-")
+    return candidate
+
+
+def _rewrite_skill_name(skill_dir: Path, name: str) -> None:
+    skill_md = skill_dir / "SKILL.md"
+    content = skill_md.read_text()
+    updated, count = re.subn(r"^name:\s*.+$", f"name: {name}", content, count=1, flags=re.MULTILINE)
+    if count:
+        skill_md.write_text(updated)
 
 
 def _build_lock_entry(

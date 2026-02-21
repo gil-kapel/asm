@@ -1,4 +1,4 @@
-"""CLI commands — init, add, create, sync."""
+"""CLI commands — init, search, add, create, sync, skill, lock."""
 
 from __future__ import annotations
 
@@ -38,6 +38,43 @@ def init(name: str | None, root: str) -> None:
     click.echo(f"  → {result / paths.ASM_DIR / paths.MAIN_ASM_MD}")
 
 
+# ── search ──────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("query")
+@click.option("--limit", default=10, type=int, show_default=True, help="Maximum results.")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root directory (optional context for ranking).",
+)
+def search(query: str, limit: int, root: str) -> None:
+    """Federated skill discovery across ASM, Smithery, Playbooks, and GitHub."""
+    from asm.services import discovery
+
+    if limit < 1:
+        raise click.ClickException("--limit must be >= 1")
+
+    root_path = Path(root)
+    with spinner() as status:
+        status("Searching federated registries…")
+        results = discovery.search(query, root=root_path, limit=limit)
+
+    if not results:
+        click.echo("No matches found.")
+        click.echo("Try broader keywords, e.g. 'python auth', 'react forms', 'sql optimization'.")
+        return
+
+    click.echo(f"Found {len(results)} result(s):")
+    for idx, item in enumerate(results, start=1):
+        click.echo(f"{idx}. [{item.provider}] {item.name}")
+        click.echo(f"   id: {item.identifier}")
+        click.echo(f"   url: {item.url}")
+        click.echo(f"   source: {item.install_source}")
+        click.echo(f"   {item.description}")
+
+
 # ── add ─────────────────────────────────────────────────────────────
 
 
@@ -65,8 +102,11 @@ def add_skill(source: str, name: str | None, root: str) -> None:
       https://github.com/u/r/tree/b/p   Full GitHub URL
       local:./path                      Explicit local prefix
       github:user/repo/path             Explicit GitHub prefix
+      gh:user/repo/path                 Short GitHub prefix
       smithery:namespace/skill          Smithery registry reference
+      sm:namespace/skill                Short Smithery prefix
       playbooks:namespace/skill         Playbooks registry reference
+      pb:namespace/skill                Short Playbooks prefix
     """
     from asm.services import bootstrap, skills
 

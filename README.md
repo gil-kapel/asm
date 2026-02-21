@@ -82,6 +82,31 @@ asm add skill ./path/to/my-skill
 asm add skill local:../shared-skills/testing
 ```
 
+### Search federated skill registries
+
+```bash
+# Search across healthy providers only
+asm search "sqlmodel"
+
+# Limit result size
+asm search "frontend design" --limit 5
+```
+
+ASM performs federated discovery across available providers (ASM index, Smithery, Playbooks, GitHub) and automatically skips providers that are unavailable at runtime.
+Each result includes a `source` value you can copy directly into `asm add skill`.
+
+### Add from Smithery / Playbooks links
+
+```bash
+# Direct provider URLs are supported
+asm add skill "https://smithery.ai/skill/mjunaidca/sqlmodel-database"
+asm add skill "https://playbooks.com/skills/openclaw/skills/sql"
+
+# Provider refs are also supported
+asm add skill "sm:mjunaidca/sqlmodel-database"
+asm add skill "pb:openclaw/skills/sql"
+```
+
 ### Create a skill from scratch
 
 ```bash
@@ -105,7 +130,7 @@ asm create skill db-layer "Async SQLAlchemy repository pattern" --from ./src/dat
 
 Source files are analysed and placed into `scripts/` (`.py`, `.sh`) or `references/` (everything else).
 
-    12 $$### Sync workspace
+### Sync workspace
 
 ```bash
 asm sync
@@ -266,6 +291,7 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | Command | Description |
 |---|---|
 | `asm init` | Initialise workspace (`asm.toml` + `.asm/`) |
+| `asm search <query>` | Federated discovery across healthy registries/providers |
 | `asm add skill <source>` | Install a skill from GitHub or local path |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
@@ -276,6 +302,8 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm skill tag <name> <tag> [ref]` | Assign a tag to HEAD or a snapshot ref |
 | `asm skill checkout <name> <ref>` | Materialize a tagged/snapshotted version |
 | `asm skill history <name>` | Show recent version history for a skill |
+| `asm skill status <name>` | Show unstaged file status vs locked snapshot |
+| `asm skill diff <name> [rel_path]` | Show unified diff vs locked snapshot |
 | `asm lock migrate` | Upgrade `asm.lock` schema in place |
 | `asm create expertise <skills...> --desc <desc>` | Bundle skills into a domain *(coming soon)* |
 | `asm --version` | Print version |
