@@ -418,6 +418,9 @@ def _dedupe(items: list[DiscoveryItem]) -> list[DiscoveryItem]:
 
 
 def _score_item(item: DiscoveryItem, query: str, hints: set[str]) -> float:
+    if _is_search_query_url(item.url):
+        return 0.0
+
     query_text = query.lower().strip()
     name = item.name.lower()
     description = item.description.lower()
@@ -519,3 +522,15 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 def _tokens(text: str) -> set[str]:
     return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= 2}
+
+
+def _is_search_query_url(url: str) -> bool:
+    normalized = url.lower().strip()
+    if not normalized:
+        return False
+
+    return (
+        normalized.startswith("https://github.com/search?")
+        and "type=code" in normalized
+        and "q=" in normalized
+    )

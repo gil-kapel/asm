@@ -168,6 +168,37 @@ asm add skill "sm:mjunaidca/sqlmodel-database"
 asm add skill "pb:openclaw/skills/sql"
 ```
 
+### Configure SkillsMP API key
+
+Some providers may require authentication (for higher rate limits or private access).  
+Create a SkillsMP API key and expose it as an environment variable.
+
+1. Log in to https://skillsmp.com
+2. Open **Settings** (or **Developer / API Keys**)
+3. Click **Create API Key**
+4. Name the key (for example: `asm-local-dev`)
+5. Copy the key and store it in a **user-level** env file (works across all projects)
+
+```bash
+mkdir -p ~/.asm-cli
+cat >> ~/.asm-cli/.env <<'EOF'
+SKILLSMP_API_KEY=sk_live_skillsmp_...
+EOF
+```
+
+ASM automatically reads user-level env files on startup (without overriding already-exported shell variables):
+
+- `~/.asm-cli/.env`
+- `~/.config/asm/env`
+- `~/.config/asm/.env`
+
+If you prefer shell profile exports, this also works:
+
+```bash
+echo 'export SKILLSMP_API_KEY=sk_live_skillsmp_...' >> ~/.zshrc
+```
+
+
 ### Create a skill from scratch
 
 ```bash

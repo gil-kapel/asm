@@ -5,6 +5,20 @@ from __future__ import annotations
 import click
 
 from asm import __version__
+from asm.core.env import load_user_env
+
+load_user_env()
+
+
+def _quick_start(root_name: str) -> str:
+    lines = [
+        "Quick start:",
+        f"  {root_name} init",
+        f"  {root_name} search \"python cli\" --limit 5",
+        f"  {root_name} add skill <source>",
+        f"  {root_name} sync",
+    ]
+    return "\n".join(lines)
 
 
 def _quick_start(root_name: str) -> str:
