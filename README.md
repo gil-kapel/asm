@@ -30,12 +30,12 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
 2) Initialize ASM in the current project root:
    asm init
 
-3) Configure SkillsMP API access at user level:
-   - create an API key at https://skillsmp.com
-   - ensure `SKILLSMP_API_KEY` is set globally (not project-local), for example:
+3) (Optional) Configure SkillsMP API access at user level:
+   - create an API key at https://skillsmp.com only if you want SkillsMP-backed results
+   - set `SKILLSMP_API_KEY` in a user-level env file (not in project `.env`), for example:
      mkdir -p ~/.asm-cli
      printf "SKILLSMP_API_KEY=sk_live_skillsmp_...\n" >> ~/.asm-cli/.env
-   - verify search providers can use it
+   - without this key, ASM still works and searches other providers
 
 4) Discover the most relevant skills for this codebase:
    - infer stack/language/framework from the repo
@@ -84,17 +84,16 @@ Or with `wget`:
 wget -qO- https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
 ```
 
-The script detects your system, installs [uv](https://docs.astral.sh/uv/) if needed, clones the repo, and makes the `asm` command available globally. No sudo required.
+The script detects your system, installs [uv](https://docs.astral.sh/uv/) if needed, and installs ASM from the official release wheel. No sudo required.
 
-**Requirements:** Python 3.10+, git
+**Requirements:** Python 3.10+
 
 ### Manual install
 
-If you prefer doing it yourself:
+If you prefer doing it yourself (same release wheel used by `install.sh`):
 
 ```bash
-git clone https://github.com/gil-kapel/asm.git ~/.asm-cli
-uv tool install -e ~/.asm-cli
+uv tool install --reinstall "https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl"
 ```
 
 Verify:
@@ -111,7 +110,7 @@ If a user is on an older ASM version, update in place:
 asm update
 ```
 
-`asm update` always updates from the official ASM repository and handles uninstall + reinstall automatically.
+`asm update` always updates from the official release wheel and handles uninstall + reinstall automatically.
 
 ### Uninstall
 
@@ -173,6 +172,8 @@ asm search "frontend design" --limit 5
 ASM performs federated discovery across available providers (ASM index, Smithery, Playbooks, GitHub) and automatically skips providers that are unavailable at runtime.
 Each result includes a `source` value you can copy directly into `asm add skill`.
 
+To keep external API requests minimal, use focused queries (`"fastapi auth"` instead of long natural-language prompts), start with a low limit (`asm search "<query>" --limit 5`), and reuse prior results instead of rerunning identical searches.
+
 ### Add from Smithery / Playbooks links
 
 ```bash
@@ -187,8 +188,7 @@ asm add skill "pb:openclaw/skills/sql"
 
 ### Configure SkillsMP API key
 
-Some providers may require authentication (for higher rate limits or private access).  
-Create a SkillsMP API key and expose it as an environment variable.
+SkillsMP access is optional. If you want SkillsMP-backed discovery, create your own API key and expose it as an environment variable.
 
 1. Log in to https://skillsmp.com
 2. Open **Settings** (or **Developer / API Keys**)
@@ -208,6 +208,8 @@ ASM automatically reads user-level env files on startup (without overriding alre
 - `~/.asm-cli/.env`
 - `~/.config/asm/env`
 - `~/.config/asm/.env`
+
+Recommended placement: `~/.asm-cli/.env` (avoid project `.env` files so keys are not committed by mistake).
 
 If you prefer shell profile exports, this also works:
 
@@ -441,6 +443,16 @@ cd asm
 uv sync
 uv run asm --version
 ```
+
+Build release wheel artifacts:
+
+```bash
+./scripts/build-wheel.sh
+```
+
+This generates:
+- `dist/release/asm-<version>-py3-none-any.whl` (versioned artifact)
+- `dist/release/asm-py3-none-any.whl` (stable release asset name used by installer/update)
 
 The CLI entry point is `src/asm/cli/__init__.py`, registered as `asm` via `pyproject.toml`:
 

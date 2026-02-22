@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -14,7 +12,7 @@ from asm.cli.ui import spinner
 from asm.core import paths
 from asm.services import integrations
 
-ASM_REPO_URL = "https://github.com/gil-kapel/asm.git"
+ASM_WHEEL_URL = "https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl"
 
 
 # ── init ────────────────────────────────────────────────────────────
@@ -280,25 +278,18 @@ def sync(root: str) -> None:
 
 @cli.command("update")
 def update() -> None:
-    """Update ASM from official repo with reinstall.
-
-    Uses the official ASM repository source only and performs
-    uninstall + reinstall automatically.
-    """
-    env_asm_home = os.environ.get("ASM_HOME", "").strip()
-    asm_home_path = Path(env_asm_home).expanduser() if env_asm_home else Path.home() / ".asm-cli"
-    install_source = _prepare_update_source(asm_home_path)
+    """Update ASM from official release wheel."""
 
     try:
         subprocess.run(["uv", "tool", "uninstall", "asm"], check=False)
         subprocess.run(
-            ["uv", "tool", "install", "--editable", str(install_source), "--reinstall"],
+            ["uv", "tool", "install", "--reinstall", ASM_WHEEL_URL],
             check=True,
         )
     except subprocess.CalledProcessError as exc:
-        raise click.ClickException(f"Failed to reinstall asm via uv: {exc}") from exc
+        raise click.ClickException(f"Failed to update asm from release wheel: {exc}") from exc
 
-    click.echo(f"✔ Updated asm from {install_source}")
+    click.echo("✔ Updated asm from official release wheel")
     click.echo("  verify with: asm --version")
 
 
@@ -610,38 +601,3 @@ def _auto_sync(root: Path) -> None:
         for name, dest in results.items():
             rel = dest.relative_to(root) if dest.is_relative_to(root) else dest
             click.echo(f"  ↻ synced {name} → {rel}")
-
-
-def _prepare_update_source(
-    asm_home: Path,
-) -> Path:
-    repo = _ensure_remote_repo(asm_home)
-    _update_remote_repo(repo)
-    return repo
-
-
-def _ensure_remote_repo(asm_home: Path) -> Path:
-    if (asm_home / ".git").exists():
-        return asm_home
-
-    if asm_home.exists():
-        shutil.rmtree(asm_home)
-
-    asm_home.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        subprocess.run(
-            ["git", "clone", "--depth", "1", ASM_REPO_URL, str(asm_home)],
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise click.ClickException(f"Failed to clone ASM source from {ASM_REPO_URL}: {exc}") from exc
-    return asm_home
-
-
-def _update_remote_repo(repo: Path) -> None:
-    try:
-        subprocess.run(["git", "-C", str(repo), "fetch", "--tags", "--quiet"], check=True)
-        subprocess.run(["git", "-C", str(repo), "checkout", "main", "--quiet"], check=True)
-        subprocess.run(["git", "-C", str(repo), "pull", "--ff-only", "--quiet"], check=True)
-    except subprocess.CalledProcessError as exc:
-        raise click.ClickException(f"Failed to update ASM source in {repo}: {exc}") from exc

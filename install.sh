@@ -3,8 +3,7 @@
 # Usage: curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
 set -eu
 
-ASM_REPO="https://github.com/gil-kapel/asm.git"
-ASM_HOME="${ASM_HOME:-$HOME/.asm-cli}"
+ASM_WHEEL_URL="${ASM_WHEEL_URL:-https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl}"
 MIN_PYTHON="3.10"
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -72,37 +71,14 @@ else
     ok "uv installed"
 fi
 
-# ── Check git ────────────────────────────────────────────────────────
-
-has git || err "git is required but not found."
-
-# ── Clone or update repo ────────────────────────────────────────────
-
-INSTALL_SOURCE="$ASM_HOME"
-if [ -d "$ASM_HOME/.git" ]; then
-    info "Updating existing installation..."
-    git -C "$ASM_HOME" fetch --tags --quiet
-    git -C "$ASM_HOME" checkout main --quiet
-    git -C "$ASM_HOME" pull --ff-only --quiet
-    ok "Updated $ASM_HOME"
-else
-    if [ -d "$ASM_HOME" ]; then
-        warn "$ASM_HOME exists but is not a git repo — removing"
-        rm -rf "$ASM_HOME"
-    fi
-    info "Cloning asm..."
-    git clone --depth 1 --quiet "$ASM_REPO" "$ASM_HOME"
-    ok "Cloned to $ASM_HOME"
-fi
-
 # ── Install via uv tool ─────────────────────────────────────────────
 
 info "Uninstalling existing asm tool (if present)..."
 uv tool uninstall asm >/dev/null 2>&1 || true
 ok "Previous asm tool removed (or not installed)"
 
-info "Installing asm CLI..."
-uv tool install --editable "$INSTALL_SOURCE" --python "$PYTHON" >/dev/null 2>&1
+info "Installing asm CLI from release wheel..."
+uv tool install --python "$PYTHON" --reinstall "$ASM_WHEEL_URL" >/dev/null 2>&1
 ok "Installed asm CLI"
 
 # ── Verify ───────────────────────────────────────────────────────────
@@ -118,9 +94,9 @@ elif [ -x "$UV_TOOL_BIN/asm" ]; then
     printf '    export PATH="%s:$PATH"\n\n' "$UV_TOOL_BIN"
     printf '  Then restart your shell and run: \033[1masm init\033[0m\n\n'
 else
-    err "Installation failed. Try manually: uv tool install -e $INSTALL_SOURCE"
+    err "Installation failed. Try manually: uv tool install --reinstall $ASM_WHEEL_URL"
 fi
 
 # ── Uninstall hint ───────────────────────────────────────────────────
 
-printf '  To uninstall: \033[2muv tool uninstall asm && rm -rf %s\033[0m\n\n' "$ASM_HOME"
+printf '  To uninstall: \033[2muv tool uninstall asm\033[0m\n\n'
