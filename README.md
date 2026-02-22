@@ -399,7 +399,3 @@ The CLI entry point is `src/asm/cli/__init__.py`, registered as `asm` via `pypro
 [project.scripts]
 asm = "asm.cli:cli"
 ```
-
-## License
-
-MIT

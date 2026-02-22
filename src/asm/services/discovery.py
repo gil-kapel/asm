@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
+import subprocess
 from urllib.parse import quote_plus
 
 import httpx
@@ -14,11 +15,16 @@ import httpx
 from asm.core import paths
 from asm.repo import config
 
-DEFAULT_ASM_INDEX_URL = "https://registry.agent-skill-manager.dev/index.json"
 SMITHERY_SEARCH_URL = "https://api.smithery.ai/skills"
 PLAYBOOKS_SEARCH_URL = "https://playbooks.com/skills"
 GITHUB_SEARCH_URL = "https://github.com/search"
-_PLAYBOOKS_SKILL_LINK_RE = re.compile(r"/skills/([a-zA-Z0-9._-]+)/([a-zA-Z0-9._-]+)/([a-zA-Z0-9._-]+)")
+_PLAYBOOKS_FIND_ADD_RE = re.compile(
+    r"^- \[(?P<tier>[^\]]+)\]\s+"
+    r"(?:(?:\((?P<installs>\d+)\s+installs\))\s+)?"
+    r"npx\s+playbooks\s+add\s+skill\s+"
+    r"(?P<owner>[a-zA-Z0-9._-]+)/(?P<repo>[a-zA-Z0-9._-]+)\s+"
+    r"--skill\s+(?P<skill>[a-zA-Z0-9._-]+)\s*$"
+)
 SMITHERY_FIELDS = "namespace,slug,displayName,externalStars,categories,gitUrl"
 
 
@@ -32,6 +38,7 @@ class DiscoveryItem:
     description: str
     url: str
     install_source: str
+    stars: int | None = None
     tags: list[str] = field(default_factory=list)
     score: float = 0.0
 
@@ -88,7 +95,6 @@ def search(query: str, *, root: Path | None = None, limit: int = 10) -> list[Dis
 
 def _enabled_providers(client: httpx.Client, query: str) -> list[ProviderSpec]:
     providers = (
-        ProviderSpec("asm-index", _health_asm_index, _search_asm_index),
         ProviderSpec("smithery", _health_smithery, _search_smithery),
         ProviderSpec("playbooks", _health_playbooks, _search_playbooks),
         ProviderSpec("github", _health_github, _search_github),
@@ -116,56 +122,6 @@ def _load_context_hints(root: Path) -> set[str]:
         hints.add(entry.name.lower())
         hints.add(entry.source.lower())
     return {h for h in hints if h}
-
-
-def _health_asm_index(client: httpx.Client, _query: str) -> bool:
-    resp = client.get(DEFAULT_ASM_INDEX_URL)
-    if resp.status_code >= 400:
-        return False
-    payload = resp.json()
-    return isinstance(payload, (dict, list))
-
-
-def _search_asm_index(client: httpx.Client, query: str) -> list[DiscoveryItem]:
-    resp = client.get(DEFAULT_ASM_INDEX_URL)
-    resp.raise_for_status()
-    payload = resp.json()
-
-    # Accept either {"skills":[...]} or direct list payloads.
-    rows = payload.get("skills", payload) if isinstance(payload, dict) else payload
-    if not isinstance(rows, list):
-        return []
-
-    q = query.lower()
-    out: list[DiscoveryItem] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        name = str(row.get("name", "")).strip()
-        description = str(row.get("description", "")).strip()
-        haystack = f"{name} {description}".lower()
-        if q not in haystack:
-            continue
-        identifier = str(row.get("id") or row.get("slug") or name).strip()
-        url = resolve_registry_ref(str(row.get("url") or row.get("source") or ""))
-        if not url:
-            provider_hint = str(row.get("provider", ""))
-            if provider_hint == "smithery":
-                url = resolve_registry_ref(f"sm:{identifier}")
-            elif provider_hint == "playbooks":
-                url = resolve_registry_ref(f"pb:{identifier}")
-        out.append(
-            DiscoveryItem(
-                provider="asm-index",
-                identifier=identifier,
-                name=name or identifier,
-                description=description or "No description provided.",
-                url=url or "N/A",
-                install_source=str(row.get("source", "")).strip() or (url or "N/A"),
-                tags=[str(t) for t in row.get("tags", []) if isinstance(t, str)],
-            )
-        )
-    return out
 
 
 def _health_smithery(client: httpx.Client, query: str) -> bool:
@@ -220,6 +176,7 @@ def _search_smithery(client: httpx.Client, query: str) -> list[DiscoveryItem]:
             DiscoveryItem(
                 provider="smithery",
                 identifier=identifier,
+                stars=stars,
                 name=name,
                 description=description or "No description provided.",
                 url=git_url or resolve_registry_ref(f"sm:{identifier}"),
@@ -227,37 +184,64 @@ def _search_smithery(client: httpx.Client, query: str) -> list[DiscoveryItem]:
                 tags=[str(t) for t in categories if isinstance(t, str)],
             )
         )
+    out = sorted(out, key=lambda i: i.stars, reverse=True)
     return out
 
 
 def _health_playbooks(client: httpx.Client, query: str) -> bool:
-    resp = client.get(
-        PLAYBOOKS_SEARCH_URL,
-        params={"search": query, "mode": "semantic"},
-    )
-    return resp.status_code < 400
+    del client, query
+    try:
+        completed = subprocess.run(
+            ["npx", "playbooks", "find", "skill", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
 
 
 def _search_playbooks(client: httpx.Client, query: str) -> list[DiscoveryItem]:
-    url = f"{PLAYBOOKS_SEARCH_URL}?search={quote_plus(query)}&mode=semantic"
-    resp = client.get(url)
-    if resp.status_code >= 400:
+    del client
+    try:
+        completed = subprocess.run(
+            ["npx", "playbooks", "find", "skill", query, "--semantic"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
         return []
-    text = resp.text
-    matches = _PLAYBOOKS_SKILL_LINK_RE.findall(text)
+    if completed.returncode != 0:
+        return []
+
     seen: set[str] = set()
     out: list[DiscoveryItem] = []
-    for owner, repo, skill in matches:
+    lines = completed.stdout.splitlines()
+    for idx, line in enumerate(lines):
+        match = _PLAYBOOKS_FIND_ADD_RE.match(line.strip())
+        if not match:
+            continue
+        owner = match.group("owner")
+        repo = match.group("repo")
+        skill = match.group("skill")
         identifier = f"{owner}/{repo}/{skill}"
         if identifier in seen:
             continue
         seen.add(identifier)
+        installs = match.group("installs")
+        installs_suffix = f" • installs: {installs}" if installs else ""
+        next_line = lines[idx + 1].strip() if idx + 1 < len(lines) else ""
+        description = next_line if next_line and not next_line.startswith("- ") else ""
         out.append(
             DiscoveryItem(
                 provider="playbooks",
                 identifier=identifier,
                 name=skill,
-                description=f"Playbooks skill {identifier}",
+                description=description or f"Playbooks skill {identifier}{installs_suffix}",
                 url=f"https://playbooks.com/skills/{identifier}",
                 install_source=f"pb:{identifier}",
                 tags=["playbooks"],

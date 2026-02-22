@@ -44,12 +44,7 @@ def add_skill(
     extra = fetch(source_type, location, dest_tmp, root=root)
 
     emit("Validating SKILL.md…")
-    ok, msg = validate(dest_tmp)
-    if not ok and "must be kebab-case" in msg and source_type in {"smithery", "playbooks"}:
-        fallback_name = _derive_registry_name(location)
-        if fallback_name:
-            _rewrite_skill_name(dest_tmp, fallback_name)
-            ok, msg = validate(dest_tmp)
+    ok, msg = _validate_with_name_fallback(dest_tmp, location)
     if not ok:
         shutil.rmtree(dest_tmp.parent, ignore_errors=True)
         raise ValueError(f"Skill validation failed: {msg}")
@@ -268,7 +263,7 @@ def _fetch_and_install_entry(
     dest_tmp = Path(tempfile.mkdtemp()) / "staging"
     extra = fetch(source_type, location, dest_tmp, root=root)
 
-    ok, msg = validate(dest_tmp)
+    ok, msg = _validate_with_name_fallback(dest_tmp, location)
     if not ok:
         shutil.rmtree(dest_tmp.parent, ignore_errors=True)
         raise ValueError(f"Validation failed: {msg}")
@@ -340,6 +335,21 @@ def _derive_registry_name(location: str) -> str:
         tail = loc.split("/")[-1]
     candidate = re.sub(r"[^a-z0-9-]+", "-", tail.lower()).strip("-")
     return candidate
+
+
+def _validate_with_name_fallback(skill_dir: Path, location: str) -> tuple[bool, str]:
+    """Validate frontmatter and normalize non-kebab names when possible."""
+    ok, msg = validate(skill_dir)
+    if ok:
+        return True, msg
+
+    if "must be kebab-case" in msg:
+        fallback_name = _derive_registry_name(location)
+        if fallback_name:
+            _rewrite_skill_name(skill_dir, fallback_name)
+            return validate(skill_dir)
+
+    return ok, msg
 
 
 def _rewrite_skill_name(skill_dir: Path, name: str) -> None:

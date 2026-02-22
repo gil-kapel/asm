@@ -12,3 +12,5 @@ wheels/
 .cursor
 *.lock
 asm.toml
+DS_Store
+launch.json
