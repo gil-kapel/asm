@@ -30,19 +30,26 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
 2) Initialize ASM in the current project root:
    asm init
 
-3) Discover the most relevant skills for this codebase:
+3) Configure SkillsMP API access at user level:
+   - create an API key at https://skillsmp.com
+   - ensure `SKILLSMP_API_KEY` is set globally (not project-local), for example:
+     mkdir -p ~/.asm-cli
+     printf "SKILLSMP_API_KEY=sk_live_skillsmp_...\n" >> ~/.asm-cli/.env
+   - verify search providers can use it
+
+4) Discover the most relevant skills for this codebase:
    - infer stack/language/framework from the repo
    - run asm search with focused queries
    - pick top relevant skills only
 
-4) Install the selected skills:
+5) Install the selected skills:
    - use the `source` field from asm search results
    - run asm add skill <source> for each selected skill
 
-5) Sync integrations:
+6) Sync integrations:
    asm sync
 
-6) Output:
+7) Output:
    - list installed skills
    - show which agent integration was synced (cursor/claude/codex)
    - report any provider/source failures and the fallback used
@@ -95,6 +102,16 @@ Verify:
 ```bash
 asm --version
 ```
+
+### Update ASM (no uninstall)
+
+If a user is on an older ASM version, update in place:
+
+```bash
+asm update
+```
+
+`asm update` always updates from the official ASM repository and handles uninstall + reinstall automatically.
 
 ### Uninstall
 
@@ -403,6 +420,7 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
 | `asm sync` | Install missing skills, verify integrity, sync agent configs |
+| `asm update` | Update ASM CLI in place (no manual uninstall required) |
 | `asm skill commit <name> -m <msg>` | Create a new local skill revision |
 | `asm skill stash push <name> [-m <msg>]` | Save WIP snapshot without version bump |
 | `asm skill stash apply <name> [stash_id]` | Restore a stashed snapshot |

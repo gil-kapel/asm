@@ -6,7 +6,6 @@ set -eu
 ASM_REPO="https://github.com/gil-kapel/asm.git"
 ASM_HOME="${ASM_HOME:-$HOME/.asm-cli}"
 MIN_PYTHON="3.10"
-ASM_SOURCE_MODE="${ASM_SOURCE_MODE:-auto}" # auto | local | remote
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -16,20 +15,6 @@ warn()  { printf '  \033[1;33m!\033[0m %s\n' "$*" >&2; }
 err()   { printf '  \033[1;31m✘\033[0m %s\n' "$*" >&2; exit 1; }
 
 has() { command -v "$1" >/dev/null 2>&1; }
-
-resolve_script_dir() {
-    # Works for "sh ./install.sh" and absolute/relative execution.
-    # When piped ("curl ... | sh"), $0 is "sh" and this resolves to empty.
-    case "$0" in
-        /*) script_path="$0" ;;
-        *) script_path="$PWD/$0" ;;
-    esac
-    if [ -f "$script_path" ]; then
-        (cd "$(dirname "$script_path")" && pwd)
-    else
-        printf '%s' ""
-    fi
-}
 
 version_gte() {
     # Returns 0 if $1 >= $2 (dot-separated version comparison)
@@ -91,62 +76,30 @@ fi
 
 has git || err "git is required but not found."
 
-# ── Resolve source mode ──────────────────────────────────────────────
-
-SCRIPT_DIR="$(resolve_script_dir)"
-LOCAL_SOURCE=""
-if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/.git" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
-    LOCAL_SOURCE="$SCRIPT_DIR"
-fi
-
-INSTALL_SOURCE=""
-case "$ASM_SOURCE_MODE" in
-    local)
-        [ -n "$LOCAL_SOURCE" ] || err "ASM_SOURCE_MODE=local but no local ASM repo was detected."
-        INSTALL_SOURCE="$LOCAL_SOURCE"
-        info "Using local source: $INSTALL_SOURCE"
-        ;;
-    remote)
-        INSTALL_SOURCE="$ASM_HOME"
-        ;;
-    auto)
-        if [ -n "$LOCAL_SOURCE" ]; then
-            INSTALL_SOURCE="$LOCAL_SOURCE"
-            info "Detected local ASM repo — installing from local source"
-        else
-            INSTALL_SOURCE="$ASM_HOME"
-        fi
-        ;;
-    *)
-        err "Invalid ASM_SOURCE_MODE='$ASM_SOURCE_MODE' (expected: auto|local|remote)."
-        ;;
-esac
-
 # ── Clone or update repo ────────────────────────────────────────────
 
-if [ "$INSTALL_SOURCE" = "$ASM_HOME" ]; then
-    if [ -d "$ASM_HOME/.git" ]; then
-        info "Updating existing installation..."
-        git -C "$ASM_HOME" pull --ff-only --quiet 2>/dev/null || warn "git pull failed — continuing with existing version"
-        ok "Updated $ASM_HOME"
-    else
-        if [ -d "$ASM_HOME" ]; then
-            warn "$ASM_HOME exists but is not a git repo — removing"
-            rm -rf "$ASM_HOME"
-        fi
-        info "Cloning asm..."
-        git clone --depth 1 --quiet "$ASM_REPO" "$ASM_HOME"
-        ok "Cloned to $ASM_HOME"
+INSTALL_SOURCE="$ASM_HOME"
+if [ -d "$ASM_HOME/.git" ]; then
+    info "Updating existing installation..."
+    git -C "$ASM_HOME" fetch --tags --quiet
+    git -C "$ASM_HOME" checkout main --quiet
+    git -C "$ASM_HOME" pull --ff-only --quiet
+    ok "Updated $ASM_HOME"
+else
+    if [ -d "$ASM_HOME" ]; then
+        warn "$ASM_HOME exists but is not a git repo — removing"
+        rm -rf "$ASM_HOME"
     fi
+    info "Cloning asm..."
+    git clone --depth 1 --quiet "$ASM_REPO" "$ASM_HOME"
+    ok "Cloned to $ASM_HOME"
 fi
 
 # ── Install via uv tool ─────────────────────────────────────────────
 
-if uv tool list 2>/dev/null | grep -q '^asm '; then
-    info "Existing asm tool found — uninstalling first..."
-    uv tool uninstall asm >/dev/null 2>&1 || warn "Failed to uninstall previous asm tool cleanly"
-    ok "Removed previous asm tool"
-fi
+info "Uninstalling existing asm tool (if present)..."
+uv tool uninstall asm >/dev/null 2>&1 || true
+ok "Previous asm tool removed (or not installed)"
 
 info "Installing asm CLI..."
 uv tool install --editable "$INSTALL_SOURCE" --python "$PYTHON" >/dev/null 2>&1
