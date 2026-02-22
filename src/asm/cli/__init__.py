@@ -5,6 +5,9 @@ from __future__ import annotations
 import click
 
 from asm import __version__
+from asm.core.env import load_user_env
+
+load_user_env()
 
 
 def _quick_start(root_name: str) -> str:
