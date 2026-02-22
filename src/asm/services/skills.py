@@ -44,15 +44,13 @@ def add_skill(
     extra = fetch(source_type, location, dest_tmp, root=root)
 
     emit("Validating SKILL.md…")
-    ok, msg = validate(dest_tmp)
-    if not ok and "must be kebab-case" in msg and source_type in {"smithery", "playbooks"}:
-        fallback_name = _derive_registry_name(location)
-        if fallback_name:
-            _rewrite_skill_name(dest_tmp, fallback_name)
-            ok, msg = validate(dest_tmp)
+    ok, msg = _validate_with_name_fallback(dest_tmp, location)
     if not ok:
         shutil.rmtree(dest_tmp.parent, ignore_errors=True)
-        raise ValueError(f"Skill validation failed: {msg}")
+        raise ValueError(
+            f"Skill validation failed: {msg}. "
+            "Check SKILL.md frontmatter (name/description) or install with --name <kebab-case>."
+        )
 
     meta = extract_meta(dest_tmp)
     skill_name = _resolve_name(name_override, meta.name, location, dest_tmp)
@@ -268,10 +266,13 @@ def _fetch_and_install_entry(
     dest_tmp = Path(tempfile.mkdtemp()) / "staging"
     extra = fetch(source_type, location, dest_tmp, root=root)
 
-    ok, msg = validate(dest_tmp)
+    ok, msg = _validate_with_name_fallback(dest_tmp, location)
     if not ok:
         shutil.rmtree(dest_tmp.parent, ignore_errors=True)
-        raise ValueError(f"Validation failed: {msg}")
+        raise ValueError(
+            f"Validation failed: {msg}. "
+            "Fix the source SKILL.md frontmatter, then run `asm sync` again."
+        )
 
     meta = extract_meta(dest_tmp)
     final_dest = _install(dest_tmp, paths.skills_dir(root) / name)
@@ -293,7 +294,8 @@ def _guard_duplicate(root: Path, location: str, name_override: str | None) -> No
         if installed.exists() and (installed / "SKILL.md").exists():
             raise ValueError(
                 f"Skill '{candidate}' is already installed. "
-                f"Use 'asm remove skill {candidate}' first to reinstall."
+                f"To reinstall, update or remove it from asm.toml and run `asm sync`, "
+                f"or install with a different name via --name."
             )
 
 
@@ -305,7 +307,10 @@ def _resolve_name(
         name = location.rstrip("/").split("/")[-1]
     if not name:
         shutil.rmtree(staging.parent, ignore_errors=True)
-        raise ValueError("Cannot determine skill name — use --name to specify one")
+        raise ValueError(
+            "Cannot determine skill name from source. "
+            "Use --name <kebab-case> to specify one, e.g. --name my-skill."
+        )
     return name
 
 
@@ -340,6 +345,21 @@ def _derive_registry_name(location: str) -> str:
         tail = loc.split("/")[-1]
     candidate = re.sub(r"[^a-z0-9-]+", "-", tail.lower()).strip("-")
     return candidate
+
+
+def _validate_with_name_fallback(skill_dir: Path, location: str) -> tuple[bool, str]:
+    """Validate frontmatter and normalize non-kebab names when possible."""
+    ok, msg = validate(skill_dir)
+    if ok:
+        return True, msg
+
+    if "must be kebab-case" in msg:
+        fallback_name = _derive_registry_name(location)
+        if fallback_name:
+            _rewrite_skill_name(skill_dir, fallback_name)
+            return validate(skill_dir)
+
+    return ok, msg
 
 
 def _rewrite_skill_name(skill_dir: Path, name: str) -> None:
@@ -430,11 +450,13 @@ def skill_commit(
     lock = lockfile.load(paths.lock_path(root))
     current = lock.get(name)
     if not current:
-        raise ValueError(f"Skill '{name}' has no lock entry. Run `asm sync` first.")
+        raise ValueError(
+            f"Skill '{name}' has no lock entry. Run `asm sync`, then retry `asm skill commit {name} -m \"...\"`."
+        )
 
     snapshot_id = snapshots.ensure_snapshot(root, name, skill_dir)
     if snapshot_id == current.snapshot_id:
-        raise ValueError("No changes to commit for this skill.")
+        raise ValueError("No changes to commit for this skill. Edit files under .asm/skills first.")
 
     meta = extract_meta(skill_dir)
     revision = snapshots.next_local_revision(root, name)
@@ -496,11 +518,13 @@ def skill_stash_apply(
     lock = lockfile.load(lock_path)
     current = lock.get(name)
     if not current:
-        raise ValueError(f"Skill '{name}' has no lock entry. Run `asm sync` first.")
+        raise ValueError(
+            f"Skill '{name}' has no lock entry. Run `asm sync`, then retry `asm skill stash push {name}`."
+        )
 
     sid = stash_id or snapshots.latest_stash_id(root, name)
     if not sid:
-        raise ValueError(f"No stashes found for skill '{name}'.")
+        raise ValueError(f"No stashes found for skill '{name}'. Create one with `asm skill stash push {name}` first.")
     stash = snapshots.load_stash(root, name, sid)
     snapshots.materialize_snapshot(root, stash["snapshot_id"], skill_dir)
 
@@ -520,7 +544,10 @@ def skill_tag(root: Path, name: str, tag: str, ref: str = "HEAD") -> str:
     current = lock.get(name)
     if ref == "HEAD":
         if not current or not current.snapshot_id:
-            raise ValueError(f"Skill '{name}' does not have a HEAD snapshot.")
+            raise ValueError(
+                f"Skill '{name}' does not have a HEAD snapshot. "
+                f"Run `asm sync` or `asm skill commit {name} -m \"...\"` first."
+            )
         snapshot_id = current.snapshot_id
     else:
         snapshot_id = snapshots.resolve_ref(root, name, ref)
@@ -535,7 +562,9 @@ def skill_checkout(root: Path, name: str, ref: str, *, force: bool = False) -> L
     lock = lockfile.load(lock_path)
     current = lock.get(name)
     if not current:
-        raise ValueError(f"Skill '{name}' has no lock entry. Run `asm sync` first.")
+        raise ValueError(
+            f"Skill '{name}' has no lock entry. Run `asm sync`, then retry `asm skill checkout {name} <ref>`."
+        )
 
     live_integrity = lockfile.compute_integrity(skill_dir)
     if not force and current.integrity and live_integrity != current.integrity:
@@ -572,9 +601,14 @@ def skill_status(root: Path, name: str) -> SkillWorkingStatus:
     lock = lockfile.load(paths.lock_path(root))
     current = lock.get(name)
     if not current:
-        raise ValueError(f"Skill '{name}' has no lock entry. Run `asm sync` first.")
+        raise ValueError(
+            f"Skill '{name}' has no lock entry. Run `asm sync`, then retry `asm skill status {name}`."
+        )
     if not current.snapshot_id:
-        raise ValueError(f"Skill '{name}' has no snapshot baseline yet.")
+        raise ValueError(
+            f"Skill '{name}' has no snapshot baseline yet. "
+            f"Run `asm sync` or create one with `asm skill commit {name} -m \"...\"`."
+        )
 
     changes = snapshots.compare_snapshot_to_working(root, current.snapshot_id, skill_dir)
     return SkillWorkingStatus(
@@ -592,9 +626,14 @@ def skill_diff(root: Path, name: str, rel_path: str | None = None) -> str:
     lock = lockfile.load(paths.lock_path(root))
     current = lock.get(name)
     if not current:
-        raise ValueError(f"Skill '{name}' has no lock entry. Run `asm sync` first.")
+        raise ValueError(
+            f"Skill '{name}' has no lock entry. Run `asm sync`, then retry `asm skill diff {name}`."
+        )
     if not current.snapshot_id:
-        raise ValueError(f"Skill '{name}' has no snapshot baseline yet.")
+        raise ValueError(
+            f"Skill '{name}' has no snapshot baseline yet. "
+            f"Run `asm sync` or create one with `asm skill commit {name} -m \"...\"`."
+        )
     return snapshots.diff_snapshot_to_working(
         root,
         current.snapshot_id,

@@ -17,10 +17,11 @@ from asm.services import integrations
 
 
 @cli.command()
-@click.option("--name", default=None, help="Project name (defaults to directory name).")
+@click.option("--name", default=None, help="Project name override (defaults to directory name).")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def init(name: str | None, root: str) -> None:
@@ -50,7 +51,14 @@ def init(name: str | None, root: str) -> None:
     help="Project root directory (optional context for ranking).",
 )
 def search(query: str, limit: int, root: str) -> None:
-    """Federated skill discovery across ASM, Smithery, Playbooks, and GitHub."""
+    """Federated skill discovery across ASM, Smithery, Playbooks, GitHub, and SkillsMP.
+
+    SkillsMP is enabled automatically when SKILLSMP_API_KEY is set.
+
+    Examples:
+      asm search "python cli" --limit 5
+      asm search "sqlmodel repository" --path /path/to/repo
+    """
     from asm.services import discovery
 
     if limit < 1:
@@ -62,8 +70,8 @@ def search(query: str, limit: int, root: str) -> None:
         results = discovery.search(query, root=root_path, limit=limit)
 
     if not results:
-        click.echo("No matches found.")
-        click.echo("Try broader keywords, e.g. 'python auth', 'react forms', 'sql optimization'.")
+        click.echo("ℹ No matches found.")
+        click.echo("  Try broader keywords: 'python auth', 'react forms', or 'sql optimization'.")
         return
 
     click.echo(f"Found {len(results)} result(s):")
@@ -85,10 +93,11 @@ def add() -> None:
 
 @add.command("skill")
 @click.argument("source")
-@click.option("--name", default=None, help="Override the skill name.")
+@click.option("--name", default=None, help="Override installed skill name, e.g. --name my-cli-skill.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def add_skill(source: str, name: str | None, root: str) -> None:
@@ -139,11 +148,12 @@ def create() -> None:
 @click.option(
     "--from", "source_path", default=None,
     type=click.Path(exists=True, resolve_path=True),
-    help="Source code to distil into the skill.",
+    help="Source code to distill into the skill, e.g. --from ./src/asm/services/discovery.py.",
 )
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def create_skill(name_arg: str, description: str, source_path: str | None, root: str) -> None:
@@ -151,6 +161,10 @@ def create_skill(name_arg: str, description: str, source_path: str | None, root:
 
     NAME is the kebab-case skill identifier.
     DESCRIPTION is a concise explanation for agent triggering.
+
+    Examples:
+      asm create skill cli-patterns "Reusable CLI command patterns"
+      asm create skill discovery-notes "Discovery ranking guidance" --from ./src/asm/services/discovery.py
     """
     from asm.services import bootstrap, skills
 
@@ -174,17 +188,19 @@ def create_skill(name_arg: str, description: str, source_path: str | None, root:
 
 @create.command("expertise")
 @click.argument("skills_list", nargs=-1, required=True, metavar="SKILL...")
-@click.option("--desc", required=True, help="Description of the expertise domain.")
+@click.option("--description", "--desc", "description", required=True, help="Description of the expertise domain.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
-def create_expertise(skills_list: tuple[str, ...], desc: str, root: str) -> None:
+def create_expertise(skills_list: tuple[str, ...], description: str, root: str) -> None:
     """Bundle skills into a named expertise with relationship rules.
 
     Generates expertise.toml and relationships.md for agent navigation.
     """
+    _ = (skills_list, description, root)
     raise click.ClickException("Not implemented yet — coming in Phase 3.")
 
 
@@ -195,6 +211,7 @@ def create_expertise(skills_list: tuple[str, ...], desc: str, root: str) -> None
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def sync(root: str) -> None:
@@ -205,6 +222,10 @@ def sync(root: str) -> None:
     IDE agent integration files.
 
     Like `uv sync` — run after cloning a repo or pulling changes.
+
+    Examples:
+      asm sync
+      asm sync --path /path/to/repo
     """
     import time
 
@@ -244,7 +265,7 @@ def sync(root: str) -> None:
         + len(result.integrity_ok) + len(result.integrity_drift)
     )
     failed = len(result.failed)
-    summary = f"Synced {total} skill(s) in {dt:.1f}s"
+    summary = f"✔ Synced {total} skill(s) in {dt:.1f}s"
     if failed:
         summary += f", {failed} failed"
     click.echo(summary)
@@ -264,10 +285,15 @@ def skill_group() -> None:
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_commit(name: str, message: str, root: str) -> None:
-    """Commit local changes of a skill."""
+    """Commit local changes of a skill.
+
+    Examples:
+      asm skill commit cli-builder -m "tighten option parsing checklist"
+    """
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -290,10 +316,15 @@ def skill_stash_group() -> None:
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_stash_push(name: str, message: str, root: str) -> None:
-    """Stash current skill working tree."""
+    """Stash current skill working tree.
+
+    Examples:
+      asm skill stash push cli-builder -m "wip: improve examples"
+    """
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -307,14 +338,20 @@ def skill_stash_push(name: str, message: str, root: str) -> None:
 @skill_stash_group.command("apply")
 @click.argument("name")
 @click.argument("stash_id", required=False)
-@click.option("--pop", is_flag=True, help="Drop stash after applying.")
+@click.option("--pop", is_flag=True, help="Drop the stash entry after applying it.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_stash_apply(name: str, stash_id: str | None, pop: bool, root: str) -> None:
-    """Apply latest (or selected) stash for a skill."""
+    """Apply latest (or selected) stash for a skill.
+
+    Examples:
+      asm skill stash apply cli-builder
+      asm skill stash apply cli-builder <stash-id> --pop
+    """
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -333,6 +370,7 @@ def skill_stash_apply(name: str, stash_id: str | None, pop: bool, root: str) -> 
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_tag(name: str, tag: str, ref: str, root: str) -> None:
@@ -354,6 +392,7 @@ def skill_tag(name: str, tag: str, ref: str, root: str) -> None:
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_checkout(name: str, ref: str, force: bool, root: str) -> None:
@@ -371,20 +410,25 @@ def skill_checkout(name: str, ref: str, force: bool, root: str) -> None:
 
 @skill_group.command("history")
 @click.argument("name")
-@click.option("--limit", default=20, type=int, show_default=True)
+@click.option("--limit", default=20, type=int, show_default=True, help="Maximum history entries.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_history(name: str, limit: int, root: str) -> None:
-    """Show recent commit/import history for a skill."""
+    """Show recent commit/import history for a skill.
+
+    Examples:
+      asm skill history cli-builder --limit 10
+    """
     from asm.services import skills
 
     root_path = _require_workspace(root)
     entries = skills.skill_history(root_path, name, limit=limit)
     if not entries:
-        click.echo("No history yet.")
+        click.echo("ℹ No history yet.")
         return
     for item in entries:
         click.echo(
@@ -399,6 +443,7 @@ def skill_history(name: str, limit: int, root: str) -> None:
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_status(name: str, root: str) -> None:
@@ -414,7 +459,7 @@ def skill_status(name: str, root: str) -> None:
     click.echo(f"Skill: {status.name}")
     click.echo(f"Baseline snapshot: {status.snapshot_id}")
     if status.clean:
-        click.echo("Working tree clean")
+        click.echo("✔ Working tree clean")
         return
 
     for rel in status.added:
@@ -431,6 +476,7 @@ def skill_status(name: str, root: str) -> None:
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def skill_diff(name: str, rel_path: str | None, root: str) -> None:
@@ -444,7 +490,7 @@ def skill_diff(name: str, rel_path: str | None, root: str) -> None:
         raise click.ClickException(str(exc)) from exc
 
     if not diff_text:
-        click.echo("No unstaged changes")
+        click.echo("✔ No unstaged changes")
         return
     click.echo(diff_text)
 
@@ -458,10 +504,11 @@ def lock_group() -> None:
 
 
 @lock_group.command("migrate")
-@click.option("--registry-id", default="default", show_default=True)
+@click.option("--registry-id", default="default", show_default=True, help="Registry id to write in lock entries.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
     help="Project root directory.",
 )
 def lock_migrate(registry_id: str, root: str) -> None:
@@ -473,7 +520,7 @@ def lock_migrate(registry_id: str, root: str) -> None:
     if changed:
         click.echo("✔ Migrated asm.lock")
     else:
-        click.echo("asm.lock already up to date")
+        click.echo("✔ asm.lock already up to date")
 
 
 # ── helpers ─────────────────────────────────────────────────────────
@@ -482,7 +529,10 @@ def lock_migrate(registry_id: str, root: str) -> None:
 def _require_workspace(root_str: str) -> Path:
     root = paths.resolve_root(Path(root_str))
     if not (root / paths.ASM_TOML).exists():
-        raise click.ClickException(f"Not an ASM workspace. Run 'asm init' first in {root}")
+        raise click.ClickException(
+            f"Not an ASM workspace: {root}\n"
+            "Run `asm init --path <project-root>` first, then retry this command."
+        )
     return root
 
 
