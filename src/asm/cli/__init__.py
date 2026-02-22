@@ -21,6 +21,17 @@ def _quick_start(root_name: str) -> str:
     return "\n".join(lines)
 
 
+def _quick_start(root_name: str) -> str:
+    lines = [
+        "Quick start:",
+        f"  {root_name} init",
+        f"  {root_name} search \"python cli\" --limit 5",
+        f"  {root_name} add skill <source>",
+        f"  {root_name} sync",
+    ]
+    return "\n".join(lines)
+
+
 def _render_full_index(root: click.Command, root_name: str) -> str:
     lines: list[str] = []
 
