@@ -51,7 +51,9 @@ def init(name: str | None, root: str) -> None:
     help="Project root directory (optional context for ranking).",
 )
 def search(query: str, limit: int, root: str) -> None:
-    """Federated skill discovery across ASM, Smithery, Playbooks, and GitHub.
+    """Federated skill discovery across ASM, Smithery, Playbooks, GitHub, and SkillsMP.
+
+    SkillsMP is enabled automatically when SKILLSMP_API_KEY is set.
 
     Examples:
       asm search "python cli" --limit 5

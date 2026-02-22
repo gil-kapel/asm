@@ -14,3 +14,4 @@ wheels/
 asm.toml
 DS_Store
 launch.json
+.env
