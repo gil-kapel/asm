@@ -19,6 +19,19 @@ from asm.repo import config, lockfile, snapshots
 from asm.templates import build_skill_md
 
 
+def _skill_md_from_llm(name: str, description: str, body: str) -> str:
+    """Build full SKILL.md from LLM-generated description and body."""
+    return "\n".join([
+        "---",
+        f"name: {name}",
+        f"description: {description}",
+        "---",
+        "",
+        body,
+        "",
+    ])
+
+
 def add_skill(
     root: Path,
     source_raw: str,
@@ -76,8 +89,21 @@ def create_skill(
     description: str,
     source_path: str | None = None,
     on_progress: Callable[[str], None] | None = None,
+    *,
+    use_llm: bool = False,
+    llm_model: str | None = None,
+    source_url: str | None = None,
+    deepwiki_context: str | None = None,
 ) -> Path:
-    """Scaffold a new SKILL.md package and register it."""
+    """Scaffold a new SKILL.md package and register it.
+
+    When use_llm is True, calls the LLM service (LiteLLM) to generate
+    description and body; requires asm[llm] and provider API keys.
+    When source_url is set (e.g. GitHub API contents URL), fetches that
+    content and uses it as additional context for the LLM.
+    When deepwiki_context is set, includes DeepWiki-generated repo docs
+    as additional context for the LLM.
+    """
     emit = on_progress or (lambda _msg: None)
 
     skill_dir = paths.skills_dir(root) / skill_name
@@ -87,10 +113,46 @@ def create_skill(
     emit("Scaffolding skill directory…")
     skill_dir.mkdir(parents=True)
 
-    title = " ".join(w.capitalize() for w in skill_name.split("-"))
-    (skill_dir / "SKILL.md").write_text(
-        build_skill_md(skill_name, title, description, source_path)
-    )
+    if use_llm:
+        emit("Generating content with LLM…")
+        source_context = None
+        parts: list[str] = []
+        if source_path:
+            src = Path(source_path).resolve()
+            if src.is_file():
+                parts.append(src.read_text()[:8000])
+            elif src.is_dir():
+                for f in sorted(src.rglob("*"))[:30]:
+                    if f.is_file() and f.suffix in (".py", ".md", ".txt", ".toml"):
+                        try:
+                            parts.append(f"### {f.name}\n{f.read_text()[:1500]}")
+                        except Exception:
+                            pass
+        if source_url:
+            emit("Fetching content from URL…")
+            from asm.services import url_content
+
+            try:
+                url_text = url_content.fetch_url_content(source_url, max_chars=40_000)
+                parts.append(f"## Content from URL\n\n{url_text}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to fetch --from-url: {e}") from e
+        if deepwiki_context:
+            parts.append(f"## DeepWiki Documentation\n\n{deepwiki_context}")
+        if parts:
+            source_context = "\n\n".join(parts)[:50_000]
+        from asm.services import llm
+
+        desc, body = llm.generate_skill_content(
+            skill_name, description, source_context, model=llm_model
+        )
+        skill_md = _skill_md_from_llm(skill_name, desc, body)
+        (skill_dir / "SKILL.md").write_text(skill_md)
+    else:
+        title = " ".join(w.capitalize() for w in skill_name.split("-"))
+        (skill_dir / "SKILL.md").write_text(
+            build_skill_md(skill_name, title, description, source_path)
+        )
 
     if source_path:
         emit("Ingesting source code…")

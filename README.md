@@ -11,9 +11,12 @@
 
 ASM manages a project-local `.asm/` skill graph and syncs it into Cursor / Claude / Codex.
 
-- **Install curated skills** from GitHub, Smithery, and Playbooks
-- **Lock reproducibility** with `asm.lock` integrity hashes
-- **Sync context automatically** to active coding agent configs
+- **Curated Index**: Access verified, high-quality skills with non-obvious knowledge and actionable patterns.
+- **Semantic Search**: Native embedding-based ranking (LiteLLM/OpenAI) with local caching for sub-second relevance.
+- **Expertise Layer**: Bundle skills into task-oriented domains for autonomous agent selection and auto-configuration.
+- **Advanced Skill Creation**: Distill complex patterns from GitHub repos (README, source, structure) using AI.
+- **Lock Reproducibility**: Pin SHA-256 integrity hashes in `asm.lock` for consistent environments.
+- **Zero-Touch Sync**: Automatically update agent context whenever skills or expertises change.
 
 [Quick Start](#quick-start) · [Usage](#usage) · [Agent Integration](#agent-integration) · [CLI Reference](#cli-reference)
 
@@ -30,29 +33,24 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
 2) Initialize ASM in the current project root:
    asm init
 
-3) (Optional) Configure SkillsMP API access at user level:
-   - create an API key at https://skillsmp.com only if you want SkillsMP-backed results
-   - set `SKILLSMP_API_KEY` in a user-level env file (not in project `.env`), for example:
-     mkdir -p ~/.asm-cli
-     printf "SKILLSMP_API_KEY=sk_live_skillsmp_...\n" >> ~/.asm-cli/.env
-   - without this key, ASM still works and searches other providers
+3) (Optional) Configure SkillsMP/LLM access at user level:
+   - set `SKILLSMP_API_KEY` or `OPENAI_API_KEY` in ~/.asm-cli/.env for semantic discovery and AI skill creation.
 
-4) Discover the most relevant skills for this codebase:
-   - infer stack/language/framework from the repo
-   - run asm search with focused queries
-   - pick top relevant skills only
+4) Discover and install the most relevant curated skills:
+   - run `asm search <query>` to find verified skills (marked [curated])
+   - run `asm add skill <source>` for each selected skill
 
-5) Install the selected skills:
-   - use the `source` field from asm search results
-   - run asm add skill <source> for each selected skill
+5) Automate expertise configuration for your task:
+   - describe what you want to do in natural language
+   - run `asm expertise auto "<task description>"`
+   - ASM will autonomously match your task to expertise bundles, install missing skills, and sync your agent context.
 
 6) Sync integrations:
    asm sync
 
 7) Output:
-   - list installed skills
-   - show which agent integration was synced (cursor/claude/codex)
-   - report any provider/source failures and the fallback used
+   - list installed skills and active expertises
+   - confirm which agent integration was synced
 ```
 
 ## Quick Start
@@ -159,20 +157,20 @@ asm add skill ./path/to/my-skill
 asm add skill local:../shared-skills/testing
 ```
 
-### Search federated skill registries
+### Search curated and federated registries
 
 ```bash
-# Search across healthy providers only
-asm search "sqlmodel"
+# Search across curated index and healthy providers
+asm search "database patterns"
 
 # Limit result size
 asm search "frontend design" --limit 5
 ```
 
-ASM performs federated discovery across available providers (ASM index, Smithery, Playbooks, GitHub) and automatically skips providers that are unavailable at runtime.
-Each result includes a `source` value you can copy directly into `asm add skill`.
-
-To keep external API requests minimal, use focused queries (`"fastapi auth"` instead of long natural-language prompts), start with a low limit (`asm search "<query>" --limit 5`), and reuse prior results instead of rerunning identical searches.
+ASM performs federated discovery across available providers (ASM index, Smithery, Playbooks, GitHub, SkillsMP).
+- **[curated]**: Verified skills with quality scoring rank first.
+- **Semantic Ranking**: Query embeddings (via LiteLLM) are matched against skill triggers for high relevance.
+- **Local Cache**: Embeddings are cached in `~/.asm-cli/embeddings.msgpack` for instant search.
 
 ### Add from Smithery / Playbooks links
 
@@ -232,6 +230,60 @@ Scaffolds a new skill package:
 ├── scripts/       # Executable code for deterministic tasks
 └── references/    # Docs loaded into agent context as needed
 ```
+
+### Expertise: Autonomous Skill Bundling
+
+Expertises group multiple skills into task-oriented domains. Agents can autonomously match your natural language task to the right expertise.
+
+```bash
+# 1) Create a bundle of installed skills
+asm create expertise db-layer sqlmodel-database sql --desc "Database schemas and migrations"
+
+# 2) Match a task to existing expertises (sub-second similarity check)
+asm expertise suggest "write a migration for user roles"
+
+# 3) Full autonomous flow: match or create, install missing, and sync
+asm expertise auto "build a secure REST API with auth"
+```
+
+### Advanced Skill Creation (Deep Repo Analysis)
+
+Instead of manual writing, ASM can distill complex patterns from entire GitHub repositories or local directories using AI.
+
+```bash
+# Create a skill from a GitHub repo (README, source files, and structure)
+asm create skill sqlmodel-patterns "Async SQLModel usage" --from-repo tiangolo/sqlmodel
+
+# Create from a local module
+asm create skill auth-utils "Project auth conventions" --from ./src/auth/ --ai
+```
+
+- **`--from-repo OWNER/REPO`**: Fetches the README, directory structure, and key source files via GitHub API as context for the LLM.
+- **`--ai`**: Use LiteLLM to generate sophisticated instructions, usage guidelines, and examples.
+- **`--from ./path`**: Analyzes local code to extract internal patterns and conventions.
+
+### AI-assisted skill creation (LiteLLM)
+
+ASM can generate SKILL.md content (Instructions, Usage, Examples) using an LLM via [LiteLLM](https://github.com/BerriAI/litellm). Install the optional extra and set a provider API key:
+
+```bash
+uv pip install asm[llm]
+export OPENAI_API_KEY=sk-...   # or ANTHROPIC_API_KEY, etc.
+```
+
+Create a skill with generated content:
+
+```bash
+asm create skill pdf-helper "Extract text and tables from PDFs" --ai
+asm create skill cli-ux "CLI UX patterns for Click" --ai --model anthropic/claude-3-5-sonnet
+```
+
+- **`--ai`**: Use LiteLLM to generate the skill description and body.
+- **`--model`**: LiteLLM model string (default: `openai/gpt-4o-mini`). Can be set with `ASM_LLM_MODEL`.
+- **`--from ./path`**: Local file or directory; the LLM receives its content as context.
+- **`--from-url URL`**: Fetch content from a URL and use it as context for the LLM. Supports GitHub API contents (e.g. `https://api.github.com/repos/owner/repo/contents/README.md?ref=main`) and raw URLs; directories are expanded by fetching each file.
+
+LiteLLM supports 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, etc.) with a single interface; set the corresponding API key and use the `provider/model-name` format for `--model`.
 
 ### Create a skill from existing code
 
@@ -432,7 +484,9 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm skill status <name>` | Show unstaged file status vs locked snapshot |
 | `asm skill diff <name> [rel_path]` | Show unified diff vs locked snapshot |
 | `asm lock migrate` | Upgrade `asm.lock` schema in place |
-| `asm create expertise <skills...> --desc <desc>` | Bundle skills into a domain *(coming soon)* |
+| `asm create expertise <name> <skills...>` | Bundle skills into a task-oriented domain |
+| `asm expertise suggest <task>` | Match a task to existing expertises (semantic) |
+| `asm expertise auto <task>` | Autonomous match/create and configuration |
 | `asm --version` | Print version |
 
 ## Development

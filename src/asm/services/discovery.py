@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-import hashlib
+from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
@@ -16,7 +15,9 @@ from urllib.parse import quote_plus
 import httpx
 
 from asm.core import paths
+from asm.core.models import DiscoveryItem
 from asm.repo import config
+from asm.services import asm_index, embeddings
 
 SMITHERY_SEARCH_URL = "https://api.smithery.ai/skills"
 PLAYBOOKS_SEARCH_URL = "https://playbooks.com/skills"
@@ -34,22 +35,6 @@ SMITHERY_FIELDS = "namespace,slug,displayName,externalStars,categories,gitUrl"
 LEXICAL_WEIGHT = 0.75
 SEMANTIC_WEIGHT = 0.20
 STARS_WEIGHT = 0.05
-_EMBED_DIM = 128
-
-
-@dataclass
-class DiscoveryItem:
-    """Normalized search result across providers."""
-
-    provider: str
-    identifier: str
-    name: str
-    description: str
-    url: str
-    install_source: str
-    stars: int | None = None
-    tags: list[str] = field(default_factory=list)
-    score: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -78,25 +63,34 @@ def search(query: str, *, root: Path | None = None, limit: int = 10) -> list[Dis
     hints = _load_context_hints(root)
 
     aggregated: list[DiscoveryItem] = []
+
+    # Curated index first — local/cached, no network latency for the search itself.
+    try:
+        aggregated.extend(asm_index.search(query))
+    except Exception:
+        pass
+
     with httpx.Client(timeout=6.0, follow_redirects=True) as client:
         providers = _enabled_providers(client, query)
-        if not providers:
-            return []
 
-        with ThreadPoolExecutor(max_workers=len(providers)) as pool:
-            jobs = {
-                pool.submit(spec.searcher, client, query): spec.name for spec in providers
-            }
-            for future in as_completed(jobs):
-                try:
-                    aggregated.extend(future.result())
-                except Exception:
-                    # Provider failures are isolated by design.
-                    continue
+        if providers:
+            with ThreadPoolExecutor(max_workers=len(providers)) as pool:
+                jobs = {
+                    pool.submit(spec.searcher, client, query): spec.name for spec in providers
+                }
+                for future in as_completed(jobs):
+                    try:
+                        aggregated.extend(future.result())
+                    except Exception:
+                        continue
+
+    if not aggregated:
+        return []
 
     deduped = _dedupe(aggregated)
     for item in deduped:
-        item.score = _score_item(item, query, hints)
+        if item.provider != "asm-index":
+            item.score = _score_item(item, query, hints)
 
     ranked = sorted(deduped, key=lambda i: i.score, reverse=True)
     return ranked[:limit]
@@ -481,43 +475,19 @@ def _lexical_score(
 
 
 def _semantic_similarity(query_text: str, haystack: str) -> float:
+    """Semantic similarity via embedding service (API or hash fallback)."""
     if not query_text or not haystack:
         return 0.0
-    q_vec = _light_embedding(query_text)
-    h_vec = _light_embedding(haystack)
-    sim = _cosine_similarity(q_vec, h_vec)
+    q_vec = embeddings.embed(query_text)
+    h_vec = embeddings.embed(haystack)
+    sim = embeddings.cosine_similarity(q_vec, h_vec)
     return max(0.0, sim)
 
 
 def _stars_signal(stars: int | None) -> float:
     if not stars or stars <= 0:
         return 0.0
-    # Slow-growth signal, capped to avoid popularity dominating relevance.
     return min(1.0, math.sqrt(float(stars)) / 100.0)
-
-
-def _light_embedding(text: str) -> list[float]:
-    vec = [0.0] * _EMBED_DIM
-    for token in _tokens(text):
-        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
-        value = int.from_bytes(digest, byteorder="little", signed=False)
-        idx = value % _EMBED_DIM
-        sign = -1.0 if ((value >> 7) & 1) else 1.0
-        vec[idx] += sign
-    return vec
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    dot = 0.0
-    norm_a = 0.0
-    norm_b = 0.0
-    for va, vb in zip(a, b, strict=False):
-        dot += va * vb
-        norm_a += va * va
-        norm_b += vb * vb
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
 
 
 def _tokens(text: str) -> set[str]:

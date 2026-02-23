@@ -53,12 +53,13 @@ def init(name: str | None, root: str) -> None:
     help="Project root directory (optional context for ranking).",
 )
 def search(query: str, limit: int, root: str) -> None:
-    """Federated skill discovery across ASM, Smithery, Playbooks, GitHub, and SkillsMP.
+    """Federated skill discovery across curated index and remote providers.
 
-    SkillsMP is enabled automatically when SKILLSMP_API_KEY is set.
+    Matches query semantic similarity against verified skills (marked [curated])
+    and remote providers (Smithery, Playbooks, GitHub, SkillsMP).
 
     Examples:
-      asm search "python cli" --limit 5
+      asm search "python testing" --limit 5
       asm search "sqlmodel repository" --path /path/to/repo
     """
     from asm.services import discovery
@@ -153,31 +154,95 @@ def create() -> None:
     help="Source code to distill into the skill, e.g. --from ./src/asm/services/discovery.py.",
 )
 @click.option(
+    "--ai",
+    "use_llm",
+    is_flag=True,
+    default=False,
+    help="Use LLM (LiteLLM) to generate SKILL.md content. Requires asm[llm] and API key.",
+)
+@click.option(
+    "--model",
+    "llm_model",
+    default=None,
+    envvar="ASM_LLM_MODEL",
+    help="LiteLLM model string (e.g. openai/gpt-4o-mini, anthropic/claude-3-5-sonnet).",
+)
+@click.option(
+    "--from-url",
+    "source_url",
+    default=None,
+    metavar="URL",
+    help="Fetch content from URL (e.g. GitHub API contents) and use as context for --ai.",
+)
+@click.option(
+    "--from-repo",
+    "source_repo",
+    default=None,
+    metavar="OWNER/REPO",
+    help="Fetch DeepWiki docs for a GitHub repo and use as context for --ai.",
+)
+@click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
     help="Project root directory.",
 )
-def create_skill(name_arg: str, description: str, source_path: str | None, root: str) -> None:
-    """Create a new skill package from scratch or from existing code.
+def create_skill(
+    name_arg: str,
+    description: str,
+    source_path: str | None,
+    use_llm: bool,
+    llm_model: str | None,
+    source_url: str | None,
+    source_repo: str | None,
+    root: str,
+) -> None:
+    """Create a new skill package from scratch or distilled patterns.
 
     NAME is the kebab-case skill identifier.
     DESCRIPTION is a concise explanation for agent triggering.
 
+    With --ai, uses LiteLLM to generate Instructions, Usage, and Examples.
+    With --from-repo, analyzes a GitHub repo (README, structure, source)
+    to extract sophisticated patterns into the skill.
+
     Examples:
       asm create skill cli-patterns "Reusable CLI command patterns"
       asm create skill discovery-notes "Discovery ranking guidance" --from ./src/asm/services/discovery.py
+      asm create skill pdf-helper "Extract text from PDFs" --ai
+      asm create skill sqlmodel-patterns "Async SQLModel usage" --from-repo tiangolo/sqlmodel
     """
     from asm.services import bootstrap, skills
 
     root_path = _require_workspace(root)
 
+    deepwiki_context: str | None = None
+    if source_repo:
+        use_llm = True
+        from asm.services.deepwiki import fetch_repo_docs, parse_repo_ref
+        try:
+            owner, repo = parse_repo_ref(source_repo)
+            click.echo(f"  Fetching DeepWiki docs for {owner}/{repo}…")
+            deepwiki_context = fetch_repo_docs(owner, repo)
+            if not deepwiki_context:
+                click.echo("  ⚠ No DeepWiki content found, proceeding without it.")
+        except (ValueError, RuntimeError) as exc:
+            click.echo(f"  ⚠ DeepWiki fetch failed: {exc}")
+
     try:
         with spinner() as status:
             skill_dir = skills.create_skill(
-                root_path, name_arg, description, source_path, on_progress=status,
+                root_path,
+                name_arg,
+                description,
+                source_path,
+                on_progress=status,
+                use_llm=use_llm,
+                llm_model=llm_model,
+                source_url=source_url,
+                deepwiki_context=deepwiki_context,
             )
-    except (FileExistsError, ValueError) as exc:
+    except (FileExistsError, ValueError, RuntimeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     bootstrap.regenerate(root_path)
@@ -186,9 +251,16 @@ def create_skill(name_arg: str, description: str, source_path: str | None, root:
     click.echo(f"  → {skill_dir}/SKILL.md")
     if source_path:
         click.echo(f"  Source distilled from: {source_path}")
+    if source_url:
+        click.echo(f"  Context from URL: {source_url[:60]}…" if len(source_url) > 60 else f"  Context from URL: {source_url}")
+    if source_repo:
+        click.echo(f"  Context from DeepWiki: {source_repo}")
+    if use_llm:
+        click.echo("  Content generated with LLM (LiteLLM)")
 
 
 @create.command("expertise")
+@click.argument("name_arg", metavar="NAME")
 @click.argument("skills_list", nargs=-1, required=True, metavar="SKILL...")
 @click.option("--description", "--desc", "description", required=True, help="Description of the expertise domain.")
 @click.option(
@@ -197,13 +269,116 @@ def create_skill(name_arg: str, description: str, source_path: str | None, root:
     show_default=True,
     help="Project root directory.",
 )
-def create_expertise(skills_list: tuple[str, ...], description: str, root: str) -> None:
-    """Bundle skills into a named expertise with relationship rules.
+def create_expertise_cmd(name_arg: str, skills_list: tuple[str, ...], description: str, root: str) -> None:
+    """Bundle installed skills into a task-oriented expertise.
 
-    Generates expertise.toml and relationships.md for agent navigation.
+    NAME is the kebab-case expertise identifier.
+    SKILL... are names of installed skills to bundle.
+
+    Expertises provide a navigation index and relationship rules for agents.
+
+    Examples:
+      asm create expertise db-layer sql sqlmodel-database --desc "Database schema and migrations"
     """
-    _ = (skills_list, description, root)
-    raise click.ClickException("Not implemented yet — coming in Phase 3.")
+    from asm.services import bootstrap, expertise
+
+    root_path = _require_workspace(root)
+    try:
+        index_path = expertise.create_expertise(
+            name_arg, description, list(skills_list), root_path,
+        )
+    except (ValueError, FileExistsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    bootstrap.regenerate(root_path)
+    _auto_sync(root_path)
+    click.echo(f"✔ Created expertise: {name_arg}")
+    click.echo(f"  Skills: {', '.join(skills_list)}")
+    click.echo(f"  → {index_path}")
+
+
+# ── expertise ───────────────────────────────────────────────────────
+
+
+@cli.group("expertise")
+def expertise_group() -> None:
+    """Expertise matching and autonomous skill selection."""
+
+
+@expertise_group.command("suggest")
+@click.argument("task_description")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root directory.",
+)
+def expertise_suggest(task_description: str, root: str) -> None:
+    """Match a natural language task to existing expertises.
+
+    Uses semantic similarity to rank bundles by relevance to your task.
+
+    Examples:
+      asm expertise suggest "write a database migration for users"
+    """
+    from asm.services import expertise
+
+    root_path = _require_workspace(root)
+    results = expertise.suggest(task_description, root_path)
+
+    if not results:
+        click.echo("ℹ No expertises found. Create one with `asm create expertise`.")
+        return
+
+    click.echo(f"Matching expertises for: \"{task_description}\"")
+    for name, score in results:
+        bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
+        click.echo(f"  {bar} {score:.2f}  {name}")
+
+
+@expertise_group.command("auto")
+@click.argument("task_description")
+@click.option(
+    "--model",
+    "llm_model",
+    default=None,
+    envvar="ASM_LLM_MODEL",
+    help="LiteLLM model string for skill selection.",
+)
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root directory.",
+)
+def expertise_auto(task_description: str, llm_model: str | None, root: str) -> None:
+    """Autonomous expertise configuration: match, install, and sync.
+
+    Finds the best matching expertise for your task. If no good match
+    exists, uses AI to select relevant skills and creates a new bundle.
+    Automatically installs missing skills and syncs agent context.
+
+    Examples:
+      asm expertise auto "build a REST API with database migrations"
+    """
+    from asm.services import bootstrap, expertise
+
+    root_path = _require_workspace(root)
+
+    try:
+        with spinner() as status:
+            status("Matching task to expertises…")
+            name, skills_used = expertise.auto(
+                task_description, root_path, model=llm_model,
+            )
+    except (ValueError, RuntimeError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    bootstrap.regenerate(root_path)
+    _auto_sync(root_path)
+    click.echo(f"✔ Expertise: {name}")
+    click.echo(f"  Skills: {', '.join(skills_used)}")
+    click.echo(f"  → .asm/expertises/{name}/index.md")
 
 
 # ── sync ────────────────────────────────────────────────────────────
@@ -217,17 +392,12 @@ def create_expertise(skills_list: tuple[str, ...], description: str, root: str) 
     help="Project root directory.",
 )
 def sync(root: str) -> None:
-    """Install missing skills from asm.toml and sync agent configs.
+    """Install missing skills and sync agent configuration.
 
-    Reads the [skills] table, fetches anything not on disk, verifies
-    integrity of existing installs, regenerates main_asm.md, and syncs
-    IDE agent integration files.
+    Reads the [skills] and [expertises] tables, fetches missing resources,
+    verifies integrity, and regenerates IDE agent integration files.
 
     Like `uv sync` — run after cloning a repo or pulling changes.
-
-    Examples:
-      asm sync
-      asm sync --path /path/to/repo
     """
     import time
 
