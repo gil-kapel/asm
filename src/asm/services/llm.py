@@ -1,100 +1,178 @@
-"""LLM-backed generation for skill content. Uses LiteLLM when the [llm] extra is installed."""
+"""LLM-backed generation for skill content.
+
+Uses LiteLLM when the [llm] extra is installed.
+Provides a robust client with centralized configuration and error handling.
+"""
 
 from __future__ import annotations
 
+import logging
 import os
+import re
+from typing import Any, List, Optional, Tuple
 
-# LiteLLM is optional; import at call time so ASM runs without [llm] extra.
+logger = logging.getLogger(__name__)
 
-
-def _ensure_litellm() -> None:
-    try:
-        import litellm  # noqa: F401
-    except ImportError as e:
-        raise RuntimeError(
-            "LLM support requires the [llm] extra. Install with: uv pip install asm[llm]"
-        ) from e
+# Default configuration
+DEFAULT_MODEL = "openai/gpt-4o-mini"
+DEFAULT_MAX_TOKENS = 4096
+BODY_DELIMITER = "---BODY---"
 
 
-def _get_model() -> str:
-    return os.environ.get("ASM_LLM_MODEL", "openai/gpt-4o-mini").strip()
+class LLMError(Exception):
+    """Base class for all LLM-related errors."""
+
+
+class ProviderError(LLMError):
+    """Raised when the LLM provider returns an error."""
+
+
+class ParsingError(LLMError):
+    """Raised when the LLM response cannot be parsed correctly."""
+
+
+class LLMClient:
+    """A robust client for LLM operations via LiteLLM."""
+
+    def __init__(self, model: Optional[str] = None):
+        """Initialize the client, ensuring LiteLLM is available."""
+        self._ensure_litellm()
+        self.model = (model or os.environ.get("ASM_LLM_MODEL") or DEFAULT_MODEL).strip()
+
+    def _ensure_litellm(self) -> None:
+        """Check for LiteLLM and provide a helpful error if missing."""
+        try:
+            import litellm  # noqa: F401
+        except ImportError as e:
+            raise LLMError(
+                "LLM support requires the [llm] extra. Install with: uv pip install asm[llm]"
+            ) from e
+
+    def completion(
+        self,
+        messages: List[dict[str, str]],
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        num_retries: int = 2,
+        **kwargs: Any,
+    ) -> str:
+        """Execute a chat completion with error handling and logging."""
+        import litellm
+
+        try:
+            logger.debug("Executing LLM completion with model: %s", self.model)
+            response = litellm.completion(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                num_retries=num_retries,
+                **kwargs,
+            )
+            content = response.choices[0].message.content or ""
+            return content.strip()
+        except Exception as e:
+            logger.error("LLM completion failed: %s", e)
+            raise ProviderError(f"LLM provider error: {e}") from e
+
+    def generate_skill_content(
+        self,
+        name: str,
+        description: str,
+        source_context: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Generate SKILL.md content using structured prompts and robust parsing."""
+        system_prompt = self._build_system_prompt()
+        user_prompt = self._build_user_prompt(name, description, source_context)
+
+        content = self.completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+
+        if not content:
+            logger.warning("LLM returned empty content for skill: %s", name)
+            return description, self._fallback_body(name, description)
+
+        return self._parse_skill_response(content, description)
+
+    def _build_system_prompt(self) -> str:
+        return (
+            "You are an expert at writing agent skills in SKILL.md format.\n"
+            "- If source context is provided, you MUST distill it into specific Instructions and Usage.\n"
+            "- Output only valid markdown.\n"
+            "- The description must be one line, third person, summarizing what the skill does and its triggers.\n"
+            "- The body must include ## Instructions, ## Usage, and optionally ## Examples.\n"
+            f"- You MUST separate the description and the body with exactly '{BODY_DELIMITER}' on its own line."
+        )
+
+    def _build_user_prompt(
+        self, name: str, description: str, source_context: Optional[str]
+    ) -> str:
+        parts = [
+            f"Skill name: {name}",
+            f"Initial description: {description}",
+        ]
+        if source_context:
+            # Truncate context to stay within common limits while leaving room for the response
+            parts.append(f"Source context:\n\n{source_context[:15000]}")
+
+        parts.append(
+            f"Respond with:\n1. A one-line description\n2. {BODY_DELIMITER}\n3. The full markdown body"
+        )
+        return "\n\n".join(parts)
+
+    def _parse_skill_response(self, content: str, default_desc: str) -> Tuple[str, str]:
+        """Parse the LLM response, handling various output formats."""
+        if BODY_DELIMITER in content:
+            parts = content.split(BODY_DELIMITER, 1)
+            desc = self._clean_description(parts[0]) or default_desc
+            body = parts[1].strip()
+            return desc, body
+
+        # If delimiter is missing, try to split by the first header
+        header_match = re.search(r"^#+ ", content, re.MULTILINE)
+        if header_match:
+            desc_part = content[: header_match.start()].strip()
+            body_part = content[header_match.start() :].strip()
+            desc = self._clean_description(desc_part) or default_desc
+            return desc, body_part
+
+        # Last resort: use the first line as description and everything as body
+        lines = content.splitlines()
+        first_line = lines[0].strip()
+        if len(first_line) < 150:
+            return self._clean_description(first_line) or default_desc, content
+
+        return default_desc, content
+
+    def _clean_description(self, text: str) -> str:
+        """Clean up the description part of the response."""
+        # Remove "Description:", "Part 1:", markdown headers, quotes, etc.
+        text = re.sub(r"^(?i)(description|part\s*1):", "", text).strip()
+        text = text.lstrip("#").strip()
+        text = text.strip("\"' ")
+        return text.split("\n")[0].strip()
+
+    def _fallback_body(self, name: str, description: str) -> str:
+        title = name.replace("-", " ").title()
+        return (
+            f"# {title}\n\n"
+            f"## Instructions\n\n{description}\n\n"
+            "## Usage\n\nUse when the task matches the description above.\n"
+        )
+
+
+# ── Legacy compatibility wrapper ──────────────────────────────────────
 
 
 def generate_skill_content(
     name: str,
     description: str,
-    source_context: str | None = None,
+    source_context: Optional[str] = None,
     *,
-    model: str | None = None,
-) -> tuple[str, str]:
-    """Generate SKILL.md description (frontmatter) and body markdown using an LLM.
-
-    Uses LiteLLM; provider API keys must be set (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY).
-    Returns (description_for_frontmatter, body_markdown).
-    """
-    _ensure_litellm()
-    import litellm
-
-    model = (model or os.environ.get("ASM_LLM_MODEL") or "openai/gpt-4o-mini").strip()
-
-    system = """You are an expert at writing agent skills in SKILL.md format.
-- If source context is provided (e.g. README, docs), you MUST use it to write specific, detailed Instructions and Usage. Do not output a generic placeholder; distill the actual content.
-- Output only valid markdown. The description must be one line, third person, and include both what the skill does and when an agent should use it (trigger terms).
-- The body must have: ## Instructions (concrete steps based on the source), ## Usage (when to use), and optionally ## Examples. No YAML frontmatter in the body.
-- You MUST include the exact delimiter ---BODY--- on its own line between part 1 and part 2."""
-
-    user_parts = [
-        f"Skill name: {name}",
-        f"User description: {description}",
-    ]
-    if source_context:
-        user_parts.append(
-            "Source context below — use it to write detailed, specific instructions. Do not ignore it.\n\n"
-            + source_context[:12000]
-        )
-    user_parts.append(
-        "Respond with exactly two parts separated by '---BODY---' on its own line. "
-        "Part 1: one line for the frontmatter description. Part 2: the full SKILL.md body (## Instructions, ## Usage, ## Examples as appropriate) based on the source."
-    )
-    user_msg = "\n\n".join(user_parts)
-
-    try:
-        response = litellm.completion(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-            max_tokens=4096,
-        )
-    except Exception as e:
-        raise RuntimeError(
-            f"LLM call failed: {e}. Check API key (e.g. OPENAI_API_KEY) and ASM_LLM_MODEL."
-        ) from e
-
-    content = (response.choices[0].message.content or "").strip()
-    if not content:
-        body = f"# {name.replace('-', ' ').title()}\n\n## Instructions\n\n{description}\n\n## Usage\n\nUse when the user or task matches the description above.\n"
-        return description.strip(), body
-
-    if "---BODY---" in content:
-        part1, _, part2 = content.partition("---BODY---")
-        first_line = part1.strip().split("\n")[0].strip().strip('"')
-        if first_line.lower().startswith("description:"):
-            first_line = first_line[11:].strip()
-        desc = first_line or description.strip()
-        body = part2.strip()
-        return desc, body
-
-    # Model omitted delimiter but returned content: use full response as body
-    lines = content.split("\n")
-    first_line = lines[0].strip().strip("#\"'") if lines else ""
-    if first_line.lower().startswith("description:"):
-        first_line = first_line[11:].strip()
-    if len(first_line) <= 120 and not first_line.startswith("#"):
-        desc = first_line or description.strip()
-        body = content
-    else:
-        desc = description.strip()
-        body = content
-    return desc, body
+    model: Optional[str] = None,
+) -> Tuple[str, str]:
+    """Compatibility wrapper for the new LLMClient."""
+    client = LLMClient(model=model)
+    return client.generate_skill_content(name, description, source_context)

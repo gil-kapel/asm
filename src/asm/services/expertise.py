@@ -131,14 +131,12 @@ def _llm_select_skills(
     model: str | None = None,
 ) -> list[str]:
     """Use LLM to pick the most relevant installed skills for a task."""
-    try:
-        from asm.services.llm import _ensure_litellm
-        _ensure_litellm()
-        import litellm
-    except RuntimeError:
-        return _embedding_select_skills(task_description, cfg)
+    from asm.services.llm import LLMClient, LLMError
 
-    model = (model or os.environ.get("ASM_LLM_MODEL") or "openai/gpt-4o-mini").strip()
+    try:
+        client = LLMClient(model=model)
+    except LLMError:
+        return _embedding_select_skills(task_description, cfg)
 
     skill_list = "\n".join(
         f"- {name}: {entry.source}" for name, entry in cfg.skills.items()
@@ -155,15 +153,13 @@ def _llm_select_skills(
     )
 
     try:
-        response = litellm.completion(
-            model=model,
+        raw = client.completion(
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             max_tokens=256,
         )
-        raw = (response.choices[0].message.content or "").strip()
         candidates = [s.strip().strip("`\"'") for s in raw.split(",")]
         installed = set(cfg.skills.keys())
         return [c for c in candidates if c in installed]

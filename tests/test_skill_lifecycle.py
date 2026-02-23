@@ -25,8 +25,7 @@ def test_create_skill_basic(runner, initialized_workspace):
     assert (skill_dir / "SKILL.md").exists()
 
 @patch("asm.services.llm.generate_skill_content")
-@patch("asm.services.llm._ensure_litellm")
-def test_create_skill_ai(mock_ensure, mock_gen, runner, initialized_workspace):
+def test_create_skill_ai(mock_gen, runner, initialized_workspace):
     """Test skill creation with AI."""
     mock_gen.return_value = ("AI Description", "## Instructions\nTest body")
     
