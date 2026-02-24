@@ -16,17 +16,8 @@ def _quick_start(root_name: str) -> str:
         f"  {root_name} init",
         f"  {root_name} search \"python cli\" --limit 5",
         f"  {root_name} add skill <source>",
-        f"  {root_name} sync",
-    ]
-    return "\n".join(lines)
-
-
-def _quick_start(root_name: str) -> str:
-    lines = [
-        "Quick start:",
-        f"  {root_name} init",
-        f"  {root_name} search \"python cli\" --limit 5",
-        f"  {root_name} add skill <source>",
+        f"  {root_name} expertise auto \"improve expertise suggestion accuracy\"",
+        f"  {root_name} expertise eval --dataset ./tests/routing_benchmark.jsonl --min-top1 0.80",
         f"  {root_name} sync",
     ]
     return "\n".join(lines)
@@ -54,6 +45,7 @@ def _render_grouped_index(root: click.Command, root_name: str) -> str:
         "Workspace": [],
         "Discovery": [],
         "Skills": [],
+        "Expertise": [],
         "Versioning": [],
         "Lockfile": [],
     }
@@ -68,6 +60,9 @@ def _render_grouped_index(root: click.Command, root_name: str) -> str:
             return
         if path.startswith(f"{root_name} add") or path.startswith(f"{root_name} create"):
             groups["Skills"].append(path)
+            return
+        if path.startswith(f"{root_name} expertise"):
+            groups["Expertise"].append(path)
             return
         if path.startswith(f"{root_name} skill"):
             groups["Versioning"].append(path)
@@ -86,7 +81,7 @@ def _render_grouped_index(root: click.Command, root_name: str) -> str:
                 _push(f"{base} {child_name}")
 
     lines: list[str] = []
-    for section in ("Workspace", "Discovery", "Skills", "Versioning", "Lockfile"):
+    for section in ("Workspace", "Discovery", "Skills", "Expertise", "Versioning", "Lockfile"):
         entries = groups[section]
         if not entries:
             continue

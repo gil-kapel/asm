@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import tomlkit
 
@@ -12,6 +13,7 @@ from asm.core.models import (
     AsmMeta,
     ExpertiseRef,
     ProjectConfig,
+    SkillPolicy,
     SkillEntry,
 )
 
@@ -55,6 +57,18 @@ def dump(cfg: AsmConfig) -> str:
             row.append("description", ref.description)
         if ref.skills:
             row.append("skills", ref.skills)
+        if ref.intent_tags:
+            row.append("intent_tags", ref.intent_tags)
+        if ref.task_signals:
+            row.append("task_signals", ref.task_signals)
+        if ref.confidence_hint:
+            row.append("confidence_hint", ref.confidence_hint)
+        if ref.selection_rubric:
+            row.append("selection_rubric", ref.selection_rubric)
+        row.append("prefer_advanced", ref.prefer_advanced)
+        policies = ref.resolved_skill_policies()
+        if policies:
+            row.append("skill_policies", [_policy_to_dict(p) for p in policies])
         expertises.add(name, row)
     doc.add("expertises", expertises)
 
@@ -83,10 +97,26 @@ def load(path: Path) -> AsmConfig:
 
     expertises: dict[str, ExpertiseRef] = {}
     for name, meta in exp_raw.items():
+        skill_policies = _parse_skill_policies(meta.get("skill_policies", []))
+        raw_skills = list(meta.get("skills", []))
+        if raw_skills:
+            policy_names = {policy.name for policy in skill_policies}
+            for skill_name in raw_skills:
+                if skill_name not in policy_names:
+                    skill_policies.append(SkillPolicy(name=skill_name))
+        elif skill_policies:
+            raw_skills = [policy.name for policy in skill_policies]
+
         expertises[name] = ExpertiseRef(
             name=name,
             description=meta.get("description", ""),
-            skills=list(meta.get("skills", [])),
+            skills=raw_skills,
+            intent_tags=list(meta.get("intent_tags", [])),
+            task_signals=list(meta.get("task_signals", [])),
+            confidence_hint=meta.get("confidence_hint", ""),
+            selection_rubric=list(meta.get("selection_rubric", [])),
+            prefer_advanced=meta.get("prefer_advanced", True),
+            skill_policies=skill_policies,
         )
 
     return AsmConfig(
@@ -109,3 +139,47 @@ def load(path: Path) -> AsmConfig:
 def save(cfg: AsmConfig, path: Path) -> None:
     """Write config to disk."""
     path.write_text(dump(cfg))
+
+
+def _policy_to_dict(policy: SkillPolicy) -> dict:
+    payload: dict = {"name": policy.name, "role": policy.role}
+    if policy.depends_on:
+        payload["depends_on"] = policy.depends_on
+    if policy.conflicts_with:
+        payload["conflicts_with"] = policy.conflicts_with
+    if policy.execution_order is not None:
+        payload["execution_order"] = policy.execution_order
+    payload["is_advanced"] = policy.is_advanced
+    if policy.novelty_reason:
+        payload["novelty_reason"] = policy.novelty_reason
+    return payload
+
+
+def _parse_skill_policies(raw_policies: list[dict]) -> list[SkillPolicy]:
+    parsed: list[SkillPolicy] = []
+    for raw in raw_policies or []:
+        name = str(raw.get("name", "")).strip()
+        if not name:
+            continue
+        role_value = str(raw.get("role", "required")).strip() or "required"
+        role: Literal["required", "optional", "fallback"] = "required"
+        if role_value in {"required", "optional", "fallback"}:
+            role = role_value
+        execution_order_raw = raw.get("execution_order")
+        execution_order = (
+            int(execution_order_raw)
+            if isinstance(execution_order_raw, int)
+            else None
+        )
+        parsed.append(
+            SkillPolicy(
+                name=name,
+                role=role,
+                depends_on=list(raw.get("depends_on", [])),
+                conflicts_with=list(raw.get("conflicts_with", [])),
+                execution_order=execution_order,
+                is_advanced=bool(raw.get("is_advanced", False)),
+                novelty_reason=str(raw.get("novelty_reason", "")),
+            )
+        )
+    return parsed

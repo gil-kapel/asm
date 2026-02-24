@@ -66,7 +66,11 @@ asm init
 asm search "your stack or problem" --limit 5
 asm add skill <source>
 
-# 4) Sync into active agent context
+# 4) Route task to expertises and validate routing quality
+asm expertise auto "improve expertise suggestion accuracy"
+asm expertise eval --dataset ./tests/routing_benchmark.jsonl --min-top1 0.80 --min-topk 0.95
+
+# 5) Sync into active agent context
 asm sync
 ```
 
@@ -257,13 +261,17 @@ Expertises group multiple skills into task-oriented domains. Agents can autonomo
 
 ```bash
 # 1) Create a bundle of installed skills
-asm create expertise db-layer sqlmodel-database sql --desc "Database schemas and migrations"
+asm create expertise routing-quality-engineering routing-evals embedding-ops python-testing \
+  --desc "Deterministic expertise-routing quality with embedding diagnostics and regression gates"
 
 # 2) Match a task to existing expertises (sub-second similarity check)
-asm expertise suggest "write a migration for user roles"
+asm expertise suggest "debug embedding similarity mismatches in expertise ranking"
 
 # 3) Full autonomous flow: match or create, install missing, and sync
-asm expertise auto "build a secure REST API with auth"
+asm expertise auto "improve expertise suggestion accuracy"
+
+# 4) Evaluate routing quality against a benchmark dataset
+asm expertise eval --dataset ./tests/routing_benchmark.jsonl --top-k 3 --min-top1 0.80 --min-topk 0.95
 ```
 
 ### Advanced Skill Creation (Deep Repo Analysis)
@@ -507,6 +515,7 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm create expertise <name> <skills...>` | Bundle skills into a task-oriented domain |
 | `asm expertise suggest <task>` | Match a task to existing expertises (semantic) |
 | `asm expertise auto <task>` | Autonomous match/create and configuration |
+| `asm expertise eval --dataset <file>` | Evaluate routing quality (top-1/top-k/MRR) and enforce gates |
 | `asm --version` | Print version |
 
 ## Development

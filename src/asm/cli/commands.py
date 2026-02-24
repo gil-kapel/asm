@@ -303,7 +303,7 @@ def create_expertise_cmd(name_arg: str, skills_list: tuple[str, ...], descriptio
 
 @cli.group("expertise")
 def expertise_group() -> None:
-    """Expertise matching and autonomous skill selection."""
+    """Expertise matching, autonomous selection, and routing evaluation."""
 
 
 @expertise_group.command("suggest")
@@ -380,6 +380,78 @@ def expertise_auto(task_description: str, llm_model: str | None, root: str) -> N
     click.echo(f"✔ Expertise: {name}")
     click.echo(f"  Skills: {', '.join(skills_used)}")
     click.echo(f"  → .asm/expertises/{name}/index.md")
+
+
+@expertise_group.command("eval")
+@click.option(
+    "--dataset",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Routing benchmark dataset (.json or .jsonl).",
+)
+@click.option("--top-k", default=3, type=int, show_default=True, help="Top-k hit-rate window.")
+@click.option("--min-top1", default=None, type=float, help="Fail if top-1 accuracy is below this threshold [0..1].")
+@click.option("--min-topk", default=None, type=float, help="Fail if top-k hit-rate is below this threshold [0..1].")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root directory.",
+)
+def expertise_eval(
+    dataset: str,
+    top_k: int,
+    min_top1: float | None,
+    min_topk: float | None,
+    root: str,
+) -> None:
+    """Run deterministic routing benchmarks and enforce quality gates.
+
+    Uses current expertise routing against a fixed benchmark file.
+    Prints top-1/top-k/MRR and fails when optional thresholds are missed.
+
+    Examples:
+      asm expertise eval --dataset ./tests/routing_benchmark.jsonl
+      asm expertise eval --dataset ./tests/routing_benchmark.json --min-top1 0.80 --min-topk 0.95
+    """
+    from asm.services import expertise
+
+    if top_k < 1:
+        raise click.ClickException("--top-k must be >= 1")
+    _validate_gate_threshold("min-top1", min_top1)
+    _validate_gate_threshold("min-topk", min_topk)
+
+    root_path = _require_workspace(root)
+    dataset_path = Path(dataset)
+
+    try:
+        with spinner() as status:
+            status("Running routing benchmark…")
+            report = expertise.evaluate_routing_dataset(root_path, dataset_path, top_k=top_k)
+            expertise.enforce_routing_gates(report, min_top1=min_top1, min_topk=min_topk)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("Routing benchmark report")
+    click.echo(f"  dataset: {dataset_path}")
+    click.echo(f"  cases: {report.total_cases}")
+    click.echo(f"  top-1 accuracy: {report.top1_accuracy:.3f}")
+    click.echo(f"  top-{report.top_k} hit-rate: {report.topk_hit_rate:.3f}")
+    click.echo(f"  mean reciprocal rank: {report.mean_reciprocal_rank:.3f}")
+
+    misses = [r for r in report.case_results if not r.is_top1_hit]
+    if not misses:
+        click.echo("  ✔ no top-1 misses")
+        return
+
+    click.echo(f"  ✗ top-1 misses: {len(misses)}")
+    click.echo("  first 5 misses:")
+    for row in misses[:5]:
+        matched = row.matched_expertise or "none"
+        topk = ", ".join(row.top_k_matches) if row.top_k_matches else "none"
+        task_preview = row.task if len(row.task) <= 80 else f"{row.task[:77]}..."
+        click.echo(f"    - expected={row.expected_expertise} matched={matched} topk=[{topk}]")
+        click.echo(f"      task: {task_preview}")
 
 
 # ── sync ────────────────────────────────────────────────────────────
@@ -741,6 +813,13 @@ def _require_workspace(root_str: str) -> Path:
             "Run `asm init --path <project-root>` first, then retry this command."
         )
     return root
+
+
+def _validate_gate_threshold(name: str, value: float | None) -> None:
+    if value is None:
+        return
+    if not 0.0 <= value <= 1.0:
+        raise click.ClickException(f"--{name} must be between 0 and 1")
 
 
 def _resolve_sync_targets(root: Path, cfg, explicit: str | None) -> list[str]:

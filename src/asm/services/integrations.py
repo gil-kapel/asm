@@ -34,28 +34,41 @@ def sync_cursor(root: Path, cfg: AsmConfig) -> Path:
     lines = [
         "---",
         "name: asm",
-        "description: ASM-managed SOTA skills. Read .asm/main_asm.md before every task.",
+        "description: ASM-managed advanced skill router. Always start here, then route via .asm/main_asm.md.",
         "---",
         "",
         "# ASM — Agent Skill Manager",
         "",
-        "Read `.asm/main_asm.md` to discover all installed SOTA skills.",
-        "Follow the instructions and skill blueprints defined there.",
+        "Always read `.asm/main_asm.md` first before selecting any skill.",
+        "This skill is the required first-stop router for expertise selection.",
+        "",
+        "## Mandatory Flow",
+        "",
+        "1. Open `.asm/main_asm.md` and choose one expertise group.",
+        "2. Open `.asm/expertises/<group>/index.md` and `relationships.md`.",
+        "3. Load only the selected skills in relationship-safe order.",
+        "4. Prefer advanced, non-trivial skills when the group provides them.",
         "",
     ]
 
+    if cfg.expertises:
+        lines.append("## Expertise Groups")
+        lines.append("")
+        for name, ref in cfg.expertises.items():
+            purpose = ref.description or "No description provided."
+            signals = ", ".join(ref.task_signals[:2]) if ref.task_signals else "n/a"
+            lines.append(f"- **{name}** — {purpose}")
+            lines.append(f"  - Signals: {signals}")
+            lines.append(f"  - Router: `.asm/expertises/{name}/index.md`")
+        lines.append("")
+
     if cfg.skills:
-        lines.append("## Installed Skills")
+        lines.append("## Installed Skills (Reference Only)")
+        lines.append("")
+        lines.append("Do not pick directly from this list before expertise routing.")
         lines.append("")
         for name in cfg.skills:
             lines.append(f"- **{name}**: `.asm/skills/{name}/SKILL.md`")
-        lines.append("")
-
-    if cfg.expertises:
-        lines.append("## Active Expertises")
-        lines.append("")
-        for name in cfg.expertises:
-            lines.append(f"- **{name}**: `.asm/expertises/{name}/index.md`")
         lines.append("")
 
     dest.write_text("\n".join(lines))

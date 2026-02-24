@@ -20,3 +20,5 @@ docs/
 CLAUDE.md
 AGENTS.md   
 STATE.md
+.ruff_cache/
+.pytest_cache/
