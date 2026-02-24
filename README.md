@@ -91,10 +91,10 @@ The script detects your system, installs [uv](https://docs.astral.sh/uv/) if nee
 If you prefer doing it yourself (same release wheel used by `install.sh`):
 
 ```bash
-uv tool install --reinstall "https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl"
+uv tool install --reinstall "https://github.com/gil-kapel/asm/releases/latest/download/asm-<version>-py3-none-any.whl"
 ```
 
-**Note:** If the project has no releases yet, install from source instead:
+**Note:** If the project has no releases yet, or to get the latest development version, install from source:
 
 ```bash
 uv tool install git+https://github.com/gil-kapel/asm
@@ -114,15 +114,21 @@ Verify:
 asm --version
 ```
 
-### Update ASM (no uninstall)
+### Update ASM
 
-If a user is on an older ASM version, update in place:
+To update to the latest version from source:
+
+```bash
+uv tool upgrade asm --from git+https://github.com/gil-kapel/asm
+```
+
+Or just use the built-in update:
 
 ```bash
 asm update
 ```
 
-`asm update` always updates from the official release wheel and handles uninstall + reinstall automatically.
+`asm update` is resilient: it tries to update from the official release wheel first, and falls back to the source (git) if no valid release is found.
 
 ### Uninstall
 

@@ -19,7 +19,6 @@ uv build --wheel
 
 WHEEL_PATH="$(ls "$DIST_DIR"/asm-*-py3-none-any.whl)"
 cp "$WHEEL_PATH" "$RELEASE_DIR/"
-cp "$WHEEL_PATH" "$RELEASE_DIR/asm-py3-none-any.whl"
 
 if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$RELEASE_DIR"/*.whl > "$RELEASE_DIR/SHA256SUMS"
@@ -27,4 +26,4 @@ fi
 
 printf 'Built wheel artifacts:\n'
 printf '  %s\n' "$RELEASE_DIR"
-printf 'Upload asm-py3-none-any.whl to GitHub Releases (latest/download).\n'
+printf 'Upload the versioned wheel to GitHub Releases.\n'

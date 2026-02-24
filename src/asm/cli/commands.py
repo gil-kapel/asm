@@ -13,6 +13,7 @@ from asm.core import paths
 from asm.services import integrations
 
 ASM_WHEEL_URL = "https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl"
+ASM_GIT_REPO = "https://github.com/gil-kapel/asm"
 
 
 # ── init ────────────────────────────────────────────────────────────
@@ -448,18 +449,32 @@ def sync(root: str) -> None:
 
 @cli.command("update")
 def update() -> None:
-    """Update ASM from official release wheel."""
+    """Update ASM from official release wheel or source."""
 
     try:
         subprocess.run(["uv", "tool", "uninstall", "asm"], check=False)
-        subprocess.run(
-            ["uv", "tool", "install", "--reinstall", ASM_WHEEL_URL],
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise click.ClickException(f"Failed to update asm from release wheel: {exc}") from exc
 
-    click.echo("✔ Updated asm from official release wheel")
+        # 1. Try wheel first
+        result = subprocess.run(
+            ["uv", "tool", "install", "--reinstall", ASM_WHEEL_URL],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode == 0:
+            click.echo("✔ Updated asm from official release wheel")
+        else:
+            # 2. Fallback to git
+            click.echo("  Release wheel not found or invalid. Updating from source (git)…")
+            subprocess.run(
+                ["uv", "tool", "install", "--reinstall", f"git+{ASM_GIT_REPO}"],
+                check=True,
+            )
+            click.echo("✔ Updated asm from source (git)")
+
+    except subprocess.CalledProcessError as exc:
+        raise click.ClickException(f"Failed to update asm: {exc}") from exc
+
     click.echo("  verify with: asm --version")
 
 

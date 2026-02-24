@@ -4,6 +4,7 @@
 set -eu
 
 ASM_WHEEL_URL="${ASM_WHEEL_URL:-https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl}"
+ASM_GIT_REPO="https://github.com/gil-kapel/asm"
 MIN_PYTHON="3.10"
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -77,12 +78,14 @@ info "Uninstalling existing asm tool (if present)..."
 uv tool uninstall asm >/dev/null 2>&1 || true
 ok "Previous asm tool removed (or not installed)"
 
-info "Installing asm CLI from release wheel..."
-if ! uv tool install --python "$PYTHON" --reinstall "$ASM_WHEEL_URL"; then
-    err "Failed to install from $ASM_WHEEL_URL. If this project has no releases yet, install from source:
-    uv tool install git+https://github.com/gil-kapel/asm"
+info "Installing asm CLI..."
+if uv tool install --python "$PYTHON" --reinstall "$ASM_WHEEL_URL" >/dev/null 2>&1; then
+    ok "Installed asm CLI from release wheel"
+elif uv tool install --python "$PYTHON" --reinstall "git+$ASM_GIT_REPO" >/dev/null 2>&1; then
+    ok "Installed asm CLI from source (git)"
+else
+    err "Installation failed. Try manually: uv tool install git+https://github.com/gil-kapel/asm"
 fi
-ok "Installed asm CLI"
 
 # ── Verify ───────────────────────────────────────────────────────────
 
