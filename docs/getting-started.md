@@ -64,7 +64,7 @@ So agents know which skills to use for your task, match it to an expertise: run 
 
 ## 5. Wire up agent integrations
 
-After adding or changing skills or expertises, run `asm sync`. ASM regenerates `.asm/main_asm.md` from your **expertises** (and skills) and updates your IDE agent configs (Cursor / Claude / Codex). See the [CLI reference](cli.md) and the README’s **Agent Integration** section for details.
+After adding or changing skills or expertises, run `asm sync`. ASM regenerates `.asm/main_asm.md` from your **expertises** (and skills) and updates your IDE agent configs (Cursor / Claude / Codex / GitHub Copilot). See the [CLI reference](cli.md) and the README’s **Agent Integration** section for details.
 
 ## Next steps
 

@@ -4,16 +4,16 @@ title: ASM — Agent Skill Manager
 
 # ASM — Agent Skill Manager
 
-**ASM is a project-local Agent Skill Manager:** it installs curated skills into `.asm/`, bundles them into task-oriented expertises, builds a root index (`.asm/main_asm.md`), and syncs into your active agent configs (Cursor, Claude, Codex).
+**ASM is a project-local Agent Skill Manager:** it installs curated skills into `.asm/`, bundles them into task-oriented expertises, builds a root index (`.asm/main_asm.md`), and syncs into your active agent configs (Cursor, Claude, Codex, GitHub Copilot).
 
 ## Prompt for agents
 
-Copy this into your agent (Cursor, Claude Code, Codex) to set up ASM end-to-end:
+Copy this into your agent (Cursor, Claude Code, Codex, GitHub Copilot) to set up ASM end-to-end:
 
 ```text
 Set up ASM in this project end-to-end.
 
-ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent config (Cursor/Claude/Codex).
+ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent config (Cursor / Claude / Codex / GitHub Copilot).
 
 1) Install ASM:
    curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
@@ -38,7 +38,7 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
 
 7) Output:
    - list installed skills and active expertises
-   - confirm which agent integration was synced
+   - confirm which agent(s) were synced (e.g. Cursor → .cursor/skills/asm, Claude Code → .claude/skills/asm, Codex → AGENTS.md, GitHub Copilot → .github/skills/asm)
 ```
 
 ## How it fits together

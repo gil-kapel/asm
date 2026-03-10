@@ -72,11 +72,12 @@ def dump(cfg: AsmConfig) -> str:
         expertises.add(name, row)
     doc.add("expertises", expertises)
 
-    if cfg.agents.cursor or cfg.agents.claude or cfg.agents.codex:
+    if cfg.agents.cursor or cfg.agents.claude or cfg.agents.codex or cfg.agents.copilot:
         agents = tomlkit.table()
         agents.add("cursor", cfg.agents.cursor)
         agents.add("claude", cfg.agents.claude)
         agents.add("codex", cfg.agents.codex)
+        agents.add("copilot", cfg.agents.copilot)
         doc.add("agents", agents)
 
     return tomlkit.dumps(doc)
@@ -132,6 +133,7 @@ def load(path: Path) -> AsmConfig:
             cursor=agents_raw.get("cursor", False),
             claude=agents_raw.get("claude", False),
             codex=agents_raw.get("codex", False),
+            copilot=agents_raw.get("copilot", False),
         ),
     )
 

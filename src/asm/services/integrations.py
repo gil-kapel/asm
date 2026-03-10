@@ -6,6 +6,7 @@ Supported agents:
   - cursor   → .cursor/skills/asm/SKILL.md
   - claude   → CLAUDE.md (sentinel) + .claude/skills/asm/SKILL.md (Claude Code discovery)
   - codex    → AGENTS.md  (sentinel-guarded section)
+  - copilot  → .github/skills/asm/SKILL.md (GitHub Copilot coding agent / VS Code)
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from asm.core.models import AsmConfig
 SENTINEL_START = "<!-- ASM:START -->"
 SENTINEL_END = "<!-- ASM:END -->"
 
-AGENTS = ("cursor", "claude", "codex")
+AGENTS = ("cursor", "claude", "codex", "copilot")
 
 
 # ── Per-agent strategies ────────────────────────────────────────────
@@ -136,6 +137,56 @@ def sync_codex(root: Path, cfg: AsmConfig) -> Path:
     return _sync_sentinel_file(root / "AGENTS.md", cfg)
 
 
+def sync_copilot(root: Path, cfg: AsmConfig) -> Path:
+    """Write .github/skills/asm/SKILL.md for GitHub Copilot (coding agent / VS Code)."""
+    skill_dir = root / ".github" / "skills" / "asm"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    dest = skill_dir / "SKILL.md"
+
+    lines = [
+        "---",
+        "name: asm",
+        "description: ASM-managed skill router. Use when working in this repo; read .asm/main_asm.md first to select expertise and skills.",
+        "---",
+        "",
+        "# ASM — Agent Skill Manager",
+        "",
+        "Always read `.asm/main_asm.md` first before selecting any skill.",
+        "This skill is the required first-stop router for expertise selection.",
+        "",
+        "## Mandatory Flow",
+        "",
+        "1. Open `.asm/main_asm.md` and choose one expertise group.",
+        "2. Open `.asm/expertises/<group>/index.md` and `relationships.md`.",
+        "3. Load only the selected skills in relationship-safe order.",
+        "4. Prefer advanced, non-trivial skills when the group provides them.",
+        "",
+    ]
+
+    if cfg.expertises:
+        lines.append("## Expertise Groups")
+        lines.append("")
+        for name, ref in cfg.expertises.items():
+            purpose = ref.description or "No description provided."
+            signals = ", ".join(ref.task_signals[:2]) if ref.task_signals else "n/a"
+            lines.append(f"- **{name}** — {purpose}")
+            lines.append(f"  - Signals: {signals}")
+            lines.append(f"  - Router: `.asm/expertises/{name}/index.md`")
+        lines.append("")
+
+    if cfg.skills:
+        lines.append("## Installed Skills (Reference Only)")
+        lines.append("")
+        lines.append("Do not pick directly from this list before expertise routing.")
+        lines.append("")
+        for name in cfg.skills:
+            lines.append(f"- **{name}**: `.asm/skills/{name}/SKILL.md`")
+        lines.append("")
+
+    dest.write_text("\n".join(lines))
+    return dest
+
+
 # ── Shared helpers ──────────────────────────────────────────────────
 
 
@@ -143,6 +194,7 @@ _STRATEGY = {
     "cursor": sync_cursor,
     "claude": sync_claude,
     "codex": sync_codex,
+    "copilot": sync_copilot,
 }
 
 
@@ -196,6 +248,8 @@ def detect_agents(root: Path) -> list[str]:
         found.append("claude")
     if (root / "AGENTS.md").exists():
         found.append("codex")
+    if (root / ".github" / "skills").is_dir():
+        found.append("copilot")
     return found
 
 

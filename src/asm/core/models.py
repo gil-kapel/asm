@@ -113,6 +113,7 @@ class AgentsConfig:
     cursor: bool = False
     claude: bool = False
     codex: bool = False
+    copilot: bool = False
 
 
 @dataclass

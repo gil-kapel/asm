@@ -31,12 +31,12 @@ ASM manages a project-local `.asm/` skill graph and syncs it into Cursor / Claud
 
 ## Copy Prompt For Your Agent
 
-Use this prompt in **any** agent (Cursor, Claude Code, Codex, or other) to set up ASM in the project.
+Use this prompt in **any** agent (Cursor, Claude Code, Codex, GitHub Copilot, or other) to set up ASM in the project.
 
 ```text
 Set up ASM in this project end-to-end.
 
-ASM (Agent Skill Manager) is a project-local skill orchestrator. It installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent’s config — whether you are Cursor, Claude Code, Codex, or another agent that reads SKILL.md / CLAUDE.md / AGENTS.md.
+ASM (Agent Skill Manager) is a project-local skill orchestrator. It installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent’s config — whether you are Cursor, Claude Code, Codex, GitHub Copilot, or another agent that reads SKILL.md / CLAUDE.md / AGENTS.md / .github/skills/.
 
 1) Install ASM:
    curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
@@ -62,7 +62,7 @@ ASM (Agent Skill Manager) is a project-local skill orchestrator. It installs cur
 
 7) Output:
    - list installed skills and active expertises
-   - confirm which agent(s) were synced (e.g. Cursor → .cursor/skills/asm, Claude Code → .claude/skills/asm + CLAUDE.md, Codex → AGENTS.md)
+   - confirm which agent(s) were synced (e.g. Cursor → .cursor/skills/asm, Claude Code → .claude/skills/asm + CLAUDE.md, Codex → AGENTS.md, GitHub Copilot → .github/skills/asm)
 ```
 
 ## Quick Start
@@ -523,6 +523,7 @@ ASM skills live in `.asm/`, but each IDE agent reads its own config location. Ag
 | Cursor | `.cursor/skills/asm/SKILL.md` | Router skill pointing to `.asm/main_asm.md` |
 | Claude Code | `CLAUDE.md` + `.claude/skills/asm/SKILL.md` | Sentinel in CLAUDE.md; router skill in `.claude/skills/` for Claude Code discovery |
 | Codex | `AGENTS.md` | Sentinel-guarded section (preserves your content) |
+| GitHub Copilot | `.github/skills/asm/SKILL.md` | Router skill for Copilot coding agent / VS Code (same format as Cursor/Claude) |
 
 ### Context-aware sync vs explicit config
 
@@ -530,7 +531,7 @@ ASM chooses sync targets in this priority:
 
 1. Explicit `[agents]` config in `asm.toml`
 2. Runtime context inference (Cursor/Claude/Codex session signals)
-3. Project marker detection (`.cursor/`, `CLAUDE.md`, `AGENTS.md`)
+3. Project marker detection (`.cursor/`, `CLAUDE.md`, `AGENTS.md`, `.github/skills/`)
 4. Fallback to Cursor (creates `.cursor/skills/asm/SKILL.md` if needed)
 
 You can force a one-off runtime context with:
@@ -539,6 +540,7 @@ You can force a one-off runtime context with:
 ASM_AGENT=cursor asm sync
 ASM_AGENT=claude asm sync
 ASM_AGENT=codex asm sync
+ASM_AGENT=copilot asm sync
 ```
 
 To lock it down, add an `[agents]` table to `asm.toml`:
@@ -548,6 +550,7 @@ To lock it down, add an `[agents]` table to `asm.toml`:
 cursor = true
 claude = true
 codex = false
+copilot = true   # GitHub Copilot coding agent / VS Code → .github/skills/asm/SKILL.md
 ```
 
 When `[agents]` is configured, only those set to `true` are synced.
