@@ -1,0 +1,705 @@
+/* ASM docs — terminal-style theme (llmery-inspired) */
+
+/* --- Terminal palette: light (default) --- */
+[data-md-color-scheme="default"] {
+  --terminal-bg-primary: #f6f8fa;
+  --terminal-bg-secondary: #ffffff;
+  --terminal-bg-tertiary: #eaeef2;
+  --terminal-border: rgba(31, 35, 40, 0.15);
+  --terminal-green: #0a7c42;
+  --terminal-green-dim: #055d29;
+  --terminal-cyan: #0969da;
+  --terminal-amber: #9a6700;
+  --terminal-text-primary: #1f2328;
+  --terminal-text-secondary: #656d76;
+  --terminal-text-dim: #8c959f;
+  --md-default-bg-color: var(--terminal-bg-primary);
+  --md-default-bg-color--light: var(--terminal-bg-secondary);
+  --md-default-fg-color: var(--terminal-text-primary);
+  --md-default-fg-color--light: var(--terminal-text-secondary);
+  --md-primary-fg-color: var(--terminal-bg-primary);
+  --md-primary-bg-color: var(--terminal-green);
+  --md-accent-fg-color: var(--terminal-cyan);
+  --md-accent-bg-color: var(--terminal-cyan);
+  --md-typeset-color: var(--terminal-text-primary);
+  --md-typeset-a-color: var(--terminal-green);
+  --md-code-fg-color: var(--terminal-green);
+  --md-code-bg-color: var(--terminal-bg-tertiary);
+  --md-code-hl-color: rgba(10, 124, 66, 0.1);
+}
+
+/* --- Terminal palette: dark (slate) --- */
+[data-md-color-scheme="slate"] {
+  --terminal-bg-primary: #0d1117;
+  --terminal-bg-secondary: #161b22;
+  --terminal-bg-tertiary: #21262d;
+  --terminal-border: rgba(48, 54, 61, 0.8);
+  --terminal-green: #00ff88;
+  --terminal-green-dim: rgba(0, 255, 136, 0.7);
+  --terminal-cyan: #22d3ee;
+  --terminal-amber: #fbbf24;
+  --terminal-text-primary: #e6edf3;
+  --terminal-text-secondary: #8b949e;
+  --terminal-text-dim: #6e7681;
+  --md-default-bg-color: var(--terminal-bg-primary);
+  --md-default-bg-color--light: var(--terminal-bg-secondary);
+  --md-default-fg-color: var(--terminal-text-primary);
+  --md-default-fg-color--light: var(--terminal-text-secondary);
+  --md-primary-fg-color: var(--terminal-bg-primary);
+  --md-primary-bg-color: var(--terminal-green);
+  --md-accent-fg-color: var(--terminal-cyan);
+  --md-accent-bg-color: var(--terminal-cyan);
+  --md-typeset-color: var(--terminal-text-primary);
+  --md-typeset-a-color: var(--terminal-green);
+  --md-code-fg-color: var(--terminal-green);
+  --md-code-bg-color: var(--terminal-bg-tertiary);
+  --md-code-hl-color: rgba(0, 255, 136, 0.15);
+}
+
+/* Monospace and antialiasing for body */
+body {
+  font-family: var(--md-text-font, "JetBrains Mono"), monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Layout: full height, flex (both modes) --- */
+.md-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--terminal-bg-primary, var(--md-default-bg-color));
+}
+
+[data-md-color-scheme="default"] .md-main,
+[data-md-color-scheme="slate"] .md-main {
+  background-color: var(--terminal-bg-primary);
+}
+
+/* --- Header: terminal bar --- */
+[data-md-color-scheme="default"] .md-header,
+[data-md-color-scheme="slate"] .md-header {
+  background-color: var(--terminal-bg-secondary);
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+[data-md-color-scheme="default"] .md-header__title,
+[data-md-color-scheme="slate"] .md-header__title {
+  color: var(--terminal-text-primary);
+  font-weight: 600;
+}
+
+/* Tabs: top bar only nav; active page clearly marked */
+[data-md-color-scheme="default"] .md-tabs,
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: var(--terminal-bg-secondary);
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+[data-md-color-scheme="default"] .md-tabs__link,
+[data-md-color-scheme="slate"] .md-tabs__link {
+  color: var(--terminal-text-secondary);
+}
+
+[data-md-color-scheme="default"] .md-tabs__link:hover,
+[data-md-color-scheme="slate"] .md-tabs__link:hover {
+  color: var(--terminal-green);
+}
+
+[data-md-color-scheme="default"] .md-tabs__link--active,
+[data-md-color-scheme="slate"] .md-tabs__link--active {
+  color: var(--terminal-green);
+  font-weight: 600;
+  border-bottom: 2px solid var(--terminal-green);
+  margin-bottom: -1px;
+}
+
+/* --- Primary sidebar (left nav): hidden; only top bar shows current page --- */
+[data-md-color-scheme="default"] .md-sidebar--primary,
+[data-md-color-scheme="slate"] .md-sidebar--primary {
+  display: none !important;
+}
+
+/* Content area: no primary sidebar, so single column on small screens */
+.md-main__inner.md-grid {
+  grid-template-columns: 1fr;
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-main__inner.md-grid {
+    grid-template-columns: 1fr minmax(0, 12rem);
+  }
+
+  .md-main__inner .md-content {
+    grid-column: 1;
+  }
+
+  .md-sidebar--secondary {
+    grid-column: 2;
+  }
+}
+
+[data-md-color-scheme="default"] .md-nav__link,
+[data-md-color-scheme="slate"] .md-nav__link {
+  color: var(--terminal-text-secondary);
+}
+
+[data-md-color-scheme="default"] .md-nav__link:hover,
+[data-md-color-scheme="default"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:hover,
+[data-md-color-scheme="slate"] .md-nav__link--active {
+  color: var(--terminal-green);
+}
+
+[data-md-color-scheme="default"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link--active {
+  background-color: color-mix(in srgb, var(--terminal-green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--terminal-green) 35%, transparent);
+  border-radius: 0.375rem;
+}
+
+[data-md-color-scheme="default"] .md-nav__link:hover:not(.md-nav__link--active),
+[data-md-color-scheme="slate"] .md-nav__link:hover:not(.md-nav__link--active) {
+  background-color: var(--terminal-bg-tertiary);
+  color: var(--terminal-text-primary);
+}
+
+/* --- Right TOC: "Contents" style --- */
+[data-md-color-scheme="default"] .md-sidebar--secondary,
+[data-md-color-scheme="slate"] .md-sidebar--secondary {
+  border-left: 1px solid var(--terminal-border);
+}
+
+[data-md-color-scheme="default"] .md-nav__title--site,
+[data-md-color-scheme="slate"] .md-nav__title--site {
+  color: var(--terminal-text-primary);
+}
+
+[data-md-color-scheme="default"] .md-nav--secondary .md-nav__title,
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__title {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--terminal-text-dim);
+  padding-left: 0.75rem;
+}
+
+[data-md-color-scheme="default"] .md-nav--secondary .md-nav__title::before,
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__title::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--terminal-green);
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+[data-md-color-scheme="default"] .md-nav--secondary .md-nav__link,
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__link {
+  font-size: 0.75rem;
+  color: var(--terminal-text-dim);
+}
+
+[data-md-color-scheme="default"] .md-nav--secondary .md-nav__link:hover,
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__link:hover {
+  color: var(--terminal-text-secondary);
+  background-color: color-mix(in srgb, var(--terminal-green) 6%, transparent);
+}
+
+/* Main content: one gutter so all boxes align */
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --content-gutter: 1.25rem;
+}
+
+.md-typeset {
+  line-height: 1.6;
+}
+
+.md-typeset .md-content__inner {
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--content-gutter);
+  padding-right: var(--content-gutter);
+  box-sizing: border-box;
+}
+
+.md-typeset p {
+  max-width: none;
+}
+
+/* --- Diagram / image: prevent overflow and overlap --- */
+.md-typeset .md-content__inner p img,
+.md-typeset figure img,
+.md-typeset .md-content__inner > p:has(> img) img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.md-typeset .md-content__inner > p:has(> img) {
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  max-width: none;
+  width: calc(100% + 2 * var(--content-gutter));
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid var(--terminal-border, rgba(0, 0, 0, 0.1));
+  background: var(--terminal-bg-secondary, #fff);
+  box-sizing: border-box;
+}
+
+/* Keep diagram/image from overflowing and overlapping other content */
+.md-typeset .md-content__inner > p:has(> img) img {
+  object-fit: contain;
+  max-height: 28rem;
+}
+
+.md-typeset .superfences-content .mermaid,
+.md-typeset pre code.language-mermaid {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.md-typeset .highlight pre code.language-mermaid,
+.md-typeset pre code.language-mermaid {
+  display: block;
+  text-align: center;
+}
+
+.md-typeset .superfences-content .mermaid {
+  margin: 1.5rem auto;
+  max-width: min(42rem, 100%);
+}
+
+/* Clear hierarchy for nested lists and steps */
+.md-typeset ol li,
+.md-typeset ul li {
+  margin-bottom: 0.25em;
+}
+
+/* Code blocks: ensure copy button area is clear */
+.md-typeset pre > code {
+  padding: 0.75em 1em;
+}
+
+/* Admonitions and callouts stand out */
+.md-typeset .admonition {
+  margin: 1em 0;
+}
+
+/* Table readability */
+.md-typeset table:not([class]) {
+  font-size: 0.9rem;
+}
+
+.md-typeset table:not([class]) th {
+  font-weight: 600;
+}
+
+/* Reduce cognitive load: consistent spacing after headings */
+.md-typeset h1 { margin-bottom: 0.75em; }
+.md-typeset h2 { margin-top: 1.25em; margin-bottom: 0.5em; }
+.md-typeset h3 { margin-top: 1em; margin-bottom: 0.4em; }
+
+/* --- Content: hero card (first h1 on page) --- */
+[data-md-color-scheme="default"] .md-content__inner > h1:first-of-type,
+[data-md-color-scheme="slate"] .md-content__inner > h1:first-of-type {
+  position: relative;
+  margin-top: 0;
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  padding: 1.25rem var(--content-gutter) 1rem;
+  border: 1px solid var(--terminal-border);
+  border-radius: 0.75rem;
+  background-color: var(--terminal-bg-secondary);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--terminal-border);
+  box-sizing: border-box;
+}
+
+[data-md-color-scheme="default"] .md-content__inner > h1:first-of-type::before,
+[data-md-color-scheme="slate"] .md-content__inner > h1:first-of-type::before {
+  content: "$ cat README";
+  display: block;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  color: var(--terminal-green-dim);
+}
+
+[data-md-color-scheme="default"] .md-content__inner > h1:first-of-type::after,
+[data-md-color-scheme="slate"] .md-content__inner > h1:first-of-type::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  background-image: linear-gradient(var(--terminal-green) 1px, transparent 1px),
+    linear-gradient(90deg, var(--terminal-green) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+[data-md-color-scheme="slate"] .md-content__inner > h1:first-of-type::after {
+  opacity: 0.03;
+}
+
+[data-md-color-scheme="default"] .md-content__inner > h1:first-of-type + p,
+[data-md-color-scheme="slate"] .md-content__inner > h1:first-of-type + p {
+  margin-top: -0.5em;
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  padding: 0 var(--content-gutter) 1.25rem;
+  border: 1px solid var(--terminal-border);
+  border-top: none;
+  border-radius: 0 0 0.75rem 0.75rem;
+  background-color: var(--terminal-bg-secondary);
+  box-sizing: border-box;
+}
+
+/* --- Numbered sections (h2): aligned, no negative margin --- */
+.md-typeset {
+  counter-reset: section;
+}
+
+[data-md-color-scheme="default"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h2 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem var(--content-gutter);
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  margin-top: 2rem;
+  margin-bottom: 0;
+  border: 1px solid var(--terminal-border);
+  border-radius: 0.5rem 0.5rem 0 0;
+  background-color: var(--terminal-bg-secondary);
+  font-size: 1.125rem;
+  font-weight: 600;
+  counter-increment: section;
+  box-sizing: border-box;
+}
+
+[data-md-color-scheme="default"] .md-typeset h2::before,
+[data-md-color-scheme="slate"] .md-typeset h2::before {
+  content: "0" counter(section);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--terminal-green) 40%, transparent);
+  flex-shrink: 0;
+  width: 2.5rem;
+}
+
+[data-md-color-scheme="default"] .md-typeset h2 + *,
+[data-md-color-scheme="slate"] .md-typeset h2 + * {
+  margin-top: 0;
+}
+
+[data-md-color-scheme="default"] .md-typeset h2 + p,
+[data-md-color-scheme="default"] .md-typeset h2 + ul,
+[data-md-color-scheme="default"] .md-typeset h2 + ol,
+[data-md-color-scheme="default"] .md-typeset h2 + .highlight,
+[data-md-color-scheme="default"] .md-typeset h2 + .admonition,
+[data-md-color-scheme="default"] .md-typeset h2 + table,
+[data-md-color-scheme="default"] .md-typeset h2 + .md-typeset__scrollwrap,
+[data-md-color-scheme="slate"] .md-typeset h2 + p,
+[data-md-color-scheme="slate"] .md-typeset h2 + ul,
+[data-md-color-scheme="slate"] .md-typeset h2 + ol,
+[data-md-color-scheme="slate"] .md-typeset h2 + .highlight,
+[data-md-color-scheme="slate"] .md-typeset h2 + .admonition,
+[data-md-color-scheme="slate"] .md-typeset h2 + table,
+[data-md-color-scheme="slate"] .md-typeset h2 + .md-typeset__scrollwrap {
+  padding-top: 1rem;
+  padding-left: var(--content-gutter);
+  padding-right: var(--content-gutter);
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  box-sizing: border-box;
+}
+
+/* --- Code blocks: terminal window; align to content gutter --- */
+[data-md-color-scheme="default"] .md-typeset .highlight,
+[data-md-color-scheme="slate"] .md-typeset .highlight {
+  position: relative;
+  border: 1px solid var(--terminal-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background-color: var(--terminal-bg-primary);
+  margin: 1rem calc(-1 * var(--content-gutter));
+  box-sizing: border-box;
+}
+
+/* Copy button: on the title bar (top-right), visible, no extra box */
+[data-md-color-scheme="default"] .md-typeset .highlight .md-code__nav,
+[data-md-color-scheme="default"] .md-typeset .highlight .md-clipboard,
+[data-md-color-scheme="default"] .md-typeset .highlight .md-code__button,
+[data-md-color-scheme="default"] .md-typeset .highlight button[title*="Copy"],
+[data-md-color-scheme="default"] .md-typeset .highlight [data-md-type="copy"],
+[data-md-color-scheme="slate"] .md-typeset .highlight .md-code__nav,
+[data-md-color-scheme="slate"] .md-typeset .highlight .md-clipboard,
+[data-md-color-scheme="slate"] .md-typeset .highlight .md-code__button,
+[data-md-color-scheme="slate"] .md-typeset .highlight button[title*="Copy"],
+[data-md-color-scheme="slate"] .md-typeset .highlight [data-md-type="copy"] {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem !important;
+  z-index: 2;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 0.5rem 0 0;
+  cursor: pointer;
+  opacity: 1 !important;
+  color: var(--terminal-text-secondary) !important;
+}
+
+[data-md-color-scheme="default"] .md-typeset .highlight .md-code__button:hover,
+[data-md-color-scheme="default"] .md-typeset .highlight .md-clipboard:hover,
+[data-md-color-scheme="default"] .md-typeset .highlight [data-md-type="copy"]:hover,
+[data-md-color-scheme="slate"] .md-typeset .highlight .md-code__button:hover,
+[data-md-color-scheme="slate"] .md-typeset .highlight .md-clipboard:hover,
+[data-md-color-scheme="slate"] .md-typeset .highlight [data-md-type="copy"]:hover {
+  color: var(--terminal-green) !important;
+}
+
+[data-md-color-scheme="default"] .md-typeset .highlight .md-code__nav,
+[data-md-color-scheme="slate"] .md-typeset .highlight .md-code__nav {
+  justify-content: flex-end;
+}
+
+/* Wrapper that contains only the copy button: overlay on title bar, no full-width row */
+[data-md-color-scheme="default"] .md-typeset .highlight > div:first-child:has(> .md-clipboard),
+[data-md-color-scheme="default"] .md-typeset .highlight > div:first-child:has(> button[title*="Copy"]),
+[data-md-color-scheme="default"] .md-typeset .highlight > div:first-child:has(> .md-code__button),
+[data-md-color-scheme="default"] .md-typeset .highlight > div:first-child:has([data-md-type="copy"]),
+[data-md-color-scheme="slate"] .md-typeset .highlight > div:first-child:has(> .md-clipboard),
+[data-md-color-scheme="slate"] .md-typeset .highlight > div:first-child:has(> button[title*="Copy"]),
+[data-md-color-scheme="slate"] .md-typeset .highlight > div:first-child:has(> .md-code__button),
+[data-md-color-scheme="slate"] .md-typeset .highlight > div:first-child:has([data-md-type="copy"]) {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  width: auto !important;
+  height: 2.25rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  z-index: 2;
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+[data-md-color-scheme="default"] .md-typeset .highlight::before,
+[data-md-color-scheme="slate"] .md-typeset .highlight::before {
+  content: "";
+  display: block;
+  height: 2.25rem;
+  background-color: var(--terminal-bg-tertiary);
+  border-bottom: 1px solid var(--terminal-border);
+  padding: 0.5rem 1rem;
+  box-sizing: border-box;
+  background-image: radial-gradient(
+      circle at 1rem 50%,
+      rgba(255, 95, 87, 0.6) 45%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 1.75rem 50%,
+      rgba(255, 189, 46, 0.6) 45%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 2.5rem 50%,
+      rgba(40, 200, 64, 0.6) 45%,
+      transparent 50%
+    );
+  background-repeat: no-repeat;
+  background-size: 0.5rem 0.5rem;
+  background-position: 0 50%, 0.75rem 50%, 1.5rem 50%;
+}
+
+[data-md-color-scheme="default"] .md-typeset .highlight::after,
+[data-md-color-scheme="slate"] .md-typeset .highlight::after {
+  content: "";
+  position: absolute;
+  top: 2.25rem;
+  left: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--terminal-green),
+    color-mix(in srgb, var(--terminal-green) 50%, transparent),
+    transparent
+  );
+}
+
+[data-md-color-scheme="default"] .md-typeset .highlight pre,
+[data-md-color-scheme="slate"] .md-typeset .highlight pre {
+  margin: 0;
+  border-radius: 0;
+  padding-top: 2.5rem;
+  overflow: auto;
+}
+
+[data-md-color-scheme="default"] .md-typeset .highlight pre > code,
+[data-md-color-scheme="slate"] .md-typeset .highlight pre > code {
+  padding-left: 1rem;
+  padding-bottom: 0.75rem;
+}
+
+/* --- Admonitions: align to content gutter --- */
+[data-md-color-scheme="default"] .md-typeset .admonition,
+[data-md-color-scheme="slate"] .md-typeset .admonition {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--terminal-cyan) 25%, transparent);
+  border-radius: 0.5rem;
+  background-color: var(--terminal-bg-secondary);
+  overflow: hidden;
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  box-sizing: border-box;
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition::before,
+[data-md-color-scheme="slate"] .md-typeset .admonition::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--terminal-cyan) 60%, transparent),
+    color-mix(in srgb, var(--terminal-cyan) 25%, transparent),
+    transparent
+  );
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition .admonition-title,
+[data-md-color-scheme="slate"] .md-typeset .admonition .admonition-title {
+  background-color: transparent;
+  color: var(--terminal-cyan);
+  font-weight: 700;
+  border: none;
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition .admonition-title::before,
+[data-md-color-scheme="slate"] .md-typeset .admonition .admonition-title::before {
+  color: var(--terminal-cyan);
+}
+
+/* --- Inline code / file path pills (exclude blocks) --- */
+[data-md-color-scheme="default"] .md-typeset :not(pre) > code,
+[data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
+  background-color: color-mix(in srgb, var(--terminal-green) 10%, var(--terminal-bg-primary));
+  border: 1px solid color-mix(in srgb, var(--terminal-green) 25%, transparent);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.9em;
+  color: var(--terminal-green);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--terminal-green) 8%, transparent);
+}
+
+[data-md-color-scheme="default"] .md-typeset a code,
+[data-md-color-scheme="slate"] .md-typeset a code {
+  color: var(--terminal-green);
+}
+
+/* --- Details/summary: align to content gutter --- */
+[data-md-color-scheme="default"] .md-typeset details,
+[data-md-color-scheme="slate"] .md-typeset details {
+  border: 1px dashed color-mix(in srgb, var(--terminal-cyan) 30%, transparent);
+  border-radius: 0.5rem;
+  background-color: color-mix(in srgb, var(--terminal-cyan) 5%, transparent);
+  margin: 1rem calc(-1 * var(--content-gutter));
+  padding: 0.5rem var(--content-gutter);
+  transition: border-color 0.2s, background-color 0.2s;
+  box-sizing: border-box;
+}
+
+[data-md-color-scheme="default"] .md-typeset details:hover,
+[data-md-color-scheme="slate"] .md-typeset details:hover {
+  border-color: color-mix(in srgb, var(--terminal-cyan) 50%, transparent);
+  background-color: color-mix(in srgb, var(--terminal-cyan) 10%, transparent);
+}
+
+[data-md-color-scheme="default"] .md-typeset summary,
+[data-md-color-scheme="slate"] .md-typeset summary {
+  color: var(--terminal-cyan);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+[data-md-color-scheme="default"] .md-typeset summary:hover,
+[data-md-color-scheme="slate"] .md-typeset summary:hover {
+  color: var(--terminal-text-primary);
+}
+
+/* --- Table wrapper (Material scrollwrap): align to content gutter --- */
+.md-typeset .md-typeset__scrollwrap {
+  margin-left: calc(-1 * var(--content-gutter));
+  margin-right: calc(-1 * var(--content-gutter));
+  width: calc(100% + 2 * var(--content-gutter));
+  max-width: calc(100% + 2 * var(--content-gutter));
+  box-sizing: border-box;
+}
+
+/* --- Tables: style (alignment via scrollwrap above) --- */
+[data-md-color-scheme="default"] .md-typeset table:not([class]),
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) {
+  border: 1px solid var(--terminal-border);
+  border-radius: 0.5rem;
+  background-color: var(--terminal-bg-secondary);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+[data-md-color-scheme="default"] .md-typeset table:not([class]) th,
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: var(--terminal-bg-tertiary);
+  border-bottom: 1px solid var(--terminal-border);
+  color: var(--terminal-text-primary);
+}
+
+[data-md-color-scheme="default"] .md-typeset table:not([class]) td,
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) td {
+  border-bottom: 1px solid var(--terminal-border);
+  color: var(--terminal-text-secondary);
+}
+
+/* --- Footer: terminal-style --- */
+[data-md-color-scheme="default"] .md-footer,
+[data-md-color-scheme="slate"] .md-footer {
+  background-color: var(--terminal-bg-secondary);
+  border-top: 1px solid var(--terminal-border);
+  color: var(--terminal-text-dim);
+}
+
+[data-md-color-scheme="default"] .md-footer a,
+[data-md-color-scheme="slate"] .md-footer a {
+  color: var(--terminal-text-secondary);
+}
+
+[data-md-color-scheme="default"] .md-footer a:hover,
+[data-md-color-scheme="slate"] .md-footer a:hover {
+  color: var(--terminal-green);
+}
