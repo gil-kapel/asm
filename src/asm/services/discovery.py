@@ -31,6 +31,12 @@ _PLAYBOOKS_FIND_ADD_RE = re.compile(
     r"(?P<owner>[a-zA-Z0-9._-]+)/(?P<repo>[a-zA-Z0-9._-]+)\s+"
     r"--skill\s+(?P<skill>[a-zA-Z0-9._-]+)\s*$"
 )
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+_SKILLS_CLI_LINE_RE = re.compile(
+    r"^(?P<identifier>[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.:-]+)"
+    r"(?:\s+(?P<installs_num>\d+(?:\.\d+)?)\s*(?P<installs_scale>[KMB])?\s*installs)?\s*$"
+)
+_SKILLS_CLI_URL_RE = re.compile(r"^\s*└\s+(https://skills\.sh/[^\s]+)\s*$")
 SMITHERY_FIELDS = "namespace,slug,displayName,externalStars,categories,gitUrl"
 LEXICAL_WEIGHT = 0.75
 SEMANTIC_WEIGHT = 0.20
@@ -101,6 +107,7 @@ def _enabled_providers(client: httpx.Client, query: str) -> list[ProviderSpec]:
         ProviderSpec("skillsmp", _health_skillsmp, _search_skillsmp),
         ProviderSpec("smithery", _health_smithery, _search_smithery),
         ProviderSpec("playbooks", _health_playbooks, _search_playbooks),
+        ProviderSpec("skills", _health_skills_cli, _search_skills_cli),
         ProviderSpec("github", _health_github, _search_github),
     )
     enabled: list[ProviderSpec] = []
@@ -371,6 +378,96 @@ def _search_playbooks(client: httpx.Client, query: str) -> list[DiscoveryItem]:
         if len(out) >= 20:
             break
     return out
+
+
+def _health_skills_cli(client: httpx.Client, query: str) -> bool:
+    del client, query
+    try:
+        completed = subprocess.run(
+            ["npx", "skills", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
+
+
+def _search_skills_cli(client: httpx.Client, query: str) -> list[DiscoveryItem]:
+    del client
+    try:
+        completed = subprocess.run(
+            ["npx", "skills", "find", query],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=20,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return []
+    if completed.returncode != 0:
+        return []
+
+    out: list[DiscoveryItem] = []
+    lines = [_ANSI_ESCAPE_RE.sub("", line) for line in completed.stdout.splitlines()]
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        match = _SKILLS_CLI_LINE_RE.match(line)
+        if not match:
+            i += 1
+            continue
+        identifier = match.group("identifier")
+        installs_raw = match.group("installs_num")
+        scale = match.group("installs_scale")
+        stars = _parse_skills_installs(installs_raw, scale)
+        url = ""
+        if i + 1 < len(lines):
+            url_match = _SKILLS_CLI_URL_RE.match(lines[i + 1].strip())
+            if url_match:
+                url = url_match.group(1)
+                i += 1
+        if not url:
+            url = f"https://skills.sh/{identifier.replace('@', '/')}"
+        install_source = f"npx skills add {identifier}"
+        desc = f"Skills CLI • install: {install_source}"
+        if stars is not None:
+            desc += f" • installs: {stars}"
+        out.append(
+            DiscoveryItem(
+                provider="skills",
+                identifier=identifier,
+                name=identifier,
+                description=desc,
+                url=url,
+                install_source=install_source,
+                stars=stars,
+                tags=["skills.sh"],
+            )
+        )
+        i += 1
+        if len(out) >= 20:
+            break
+    return out
+
+
+def _parse_skills_installs(num_str: str | None, scale: str | None) -> int | None:
+    """Convert skills CLI install count (e.g. 191.2K) to integer for ranking."""
+    if not num_str:
+        return None
+    try:
+        val = float(num_str)
+    except ValueError:
+        return None
+    if scale == "K":
+        val *= 1000
+    elif scale == "M":
+        val *= 1_000_000
+    elif scale == "B":
+        val *= 1_000_000_000
+    return int(val)
 
 
 def _health_github(client: httpx.Client, _query: str) -> bool:

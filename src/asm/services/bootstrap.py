@@ -25,6 +25,7 @@ def init_workspace(root: Path, name: str | None = None) -> Path:
 
     paths.asm_dir(root).mkdir(parents=True, exist_ok=True)
     paths.skills_dir(root).mkdir(parents=True, exist_ok=True)
+    paths.expertises_dir(root).mkdir(parents=True, exist_ok=True)
 
     config.save(cfg, asm_toml)
     lockfile.save({}, paths.lock_path(root))

@@ -88,7 +88,8 @@ def render_main_asm(cfg: AsmConfig) -> str:
 
     if not cfg.skills and not cfg.expertises:
         lines.append(
-            "_No skills installed yet. Use `asm add skill` or `asm create skill` to get started._"
+            "_No expertises or skills yet. Use `asm create expertise <name> <skills...> --desc \"...\"` "
+            "to bundle skills for a task, or `asm add skill <source>` to install a skill._"
         )
         lines.append("")
 

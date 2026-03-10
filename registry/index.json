@@ -57,6 +57,15 @@
       "use_when": "Creating new agent skills, improving skill structure, understanding SKILL.md format"
     },
     {
+      "name": "skill-creator",
+      "description": "Build, validate, and package agent skills. Guided workflow: capture intent, draft SKILL.md, write tests, run evaluations, iterate. Works with Cursor, Claude Code, and Codex.",
+      "source": "github:https://github.com/openclaw/openclaw/tree/main/skills/skill-creator",
+      "quality_score": 0.85,
+      "verified": true,
+      "tags": ["meta-skill", "skill-creation", "skill-builder", "claude-code", "cursor", "codex"],
+      "use_when": "Creating new skills from scratch, validating or packaging skills, improving skill descriptions for better triggering"
+    },
+    {
       "name": "building-clis",
       "description": "Multi-language CLI construction with Python (Typer/Click), Go (Cobra), and Rust (Clap). Argument parsing, subcommands, output formatting.",
       "source": "playbooks:ancoleman/ai-design-components/building-clis",

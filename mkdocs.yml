@@ -1,0 +1,72 @@
+site_name: ASM — Agent Skill Manager
+site_description: Agent Skill Manager — SOTA expertise for IDE agents
+repo_url: https://github.com/gil-kapel/asm
+repo_name: gil-kapel/asm
+
+# Docs source; assets (e.g. docs/assets/asm-overview.png) are copied to site/assets/ with the same name.
+docs_dir: docs
+
+theme:
+  name: material
+  language: en
+  logo: assets/asm-logo.svg
+  favicon: assets/asm-logo.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: JetBrains Mono
+    code: JetBrains Mono
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - admonition
+  - pymdownx.details
+
+plugins:
+  - search
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Overview: index.md
+  - Getting started: getting-started.md
+  - CLI reference: cli.md
+  - Expertises: expertises.md
+  - Skills:
+      - Authoring skills: skills/authoring.md
+  - Release notes: releases/index.md
+

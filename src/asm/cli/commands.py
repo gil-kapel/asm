@@ -20,15 +20,15 @@ ASM_GIT_REPO = "https://github.com/gil-kapel/asm"
 
 
 @cli.command()
-@click.option("--name", default=None, help="Project name override (defaults to directory name).")
+@click.option("--name", default=None, help="Project name (default: dir name).")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def init(name: str | None, root: str) -> None:
-    """Initialise an ASM workspace."""
+    """Initialize an ASM workspace."""
     from asm.services import bootstrap
 
     root_path = Path(root)
@@ -47,22 +47,14 @@ def init(name: str | None, root: str) -> None:
 
 @cli.command()
 @click.argument("query")
-@click.option("--limit", default=10, type=int, show_default=True, help="Maximum results.")
+@click.option("--limit", default=10, type=int, show_default=True, help="Max results.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
-    help="Project root directory (optional context for ranking).",
+    help="Project root (optional, biases ranking).",
 )
 def search(query: str, limit: int, root: str) -> None:
-    """Federated skill discovery across curated index and remote providers.
-
-    Matches query semantic similarity against verified skills (marked [curated])
-    and remote providers (Smithery, Playbooks, GitHub, SkillsMP).
-
-    Examples:
-      asm search "python testing" --limit 5
-      asm search "sqlmodel repository" --path /path/to/repo
-    """
+    """Search skill registries by natural-language query."""
     from asm.services import discovery
 
     if limit < 1:
@@ -92,35 +84,20 @@ def search(query: str, limit: int, root: str) -> None:
 
 @cli.group()
 def add() -> None:
-    """Add remote resources to the workspace."""
+    """Add resources to the workspace."""
 
 
 @add.command("skill")
 @click.argument("source")
-@click.option("--name", default=None, help="Override installed skill name, e.g. --name my-cli-skill.")
+@click.option("--name", default=None, help="Override installed skill name.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def add_skill(source: str, name: str | None, root: str) -> None:
-    """Fetch a skill from GitHub, local path, or a registry prefix.
-
-    SOURCE can be:
-
-    \b
-      ./local/path                      Local directory
-      user/repo/path/to/skill           GitHub shorthand
-      https://github.com/u/r/tree/b/p   Full GitHub URL
-      local:./path                      Explicit local prefix
-      github:user/repo/path             Explicit GitHub prefix
-      gh:user/repo/path                 Short GitHub prefix
-      smithery:namespace/skill          Smithery registry reference
-      sm:namespace/skill                Short Smithery prefix
-      playbooks:namespace/skill         Playbooks registry reference
-      pb:namespace/skill                Short Playbooks prefix
-    """
+    """Add a skill from GitHub, path, or registry source."""
     from asm.services import bootstrap, skills
 
     root_path = _require_workspace(root)
@@ -129,7 +106,11 @@ def add_skill(source: str, name: str | None, root: str) -> None:
         with spinner() as status:
             meta = skills.add_skill(root_path, source, name_override=name, on_progress=status)
     except (ValueError, FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
-        raise click.ClickException(str(exc)) from exc
+        message = str(exc)
+        hint = _hint_for_add_skill_source_error(source, message)
+        if hint:
+            message = f"{message}\n\n{hint}"
+        raise click.ClickException(message) from exc
 
     bootstrap.regenerate(root_path)
     _auto_sync(root_path)
@@ -143,50 +124,22 @@ def add_skill(source: str, name: str | None, root: str) -> None:
 
 @cli.group()
 def create() -> None:
-    """Create new skills or expertises."""
+    """Create skills or expertises."""
 
 
 @create.command("skill")
 @click.argument("name_arg", metavar="NAME")
 @click.argument("description")
-@click.option(
-    "--from", "source_path", default=None,
-    type=click.Path(exists=True, resolve_path=True),
-    help="Source code to distill into the skill, e.g. --from ./src/asm/services/discovery.py.",
-)
-@click.option(
-    "--ai",
-    "use_llm",
-    is_flag=True,
-    default=False,
-    help="Use LLM (LiteLLM) to generate SKILL.md content. Requires asm[llm] and API key.",
-)
-@click.option(
-    "--model",
-    "llm_model",
-    default=None,
-    envvar="ASM_LLM_MODEL",
-    help="LiteLLM model string (e.g. openai/gpt-4o-mini, anthropic/claude-3-5-sonnet).",
-)
-@click.option(
-    "--from-url",
-    "source_url",
-    default=None,
-    metavar="URL",
-    help="Fetch content from URL (e.g. GitHub API contents) and use as context for --ai.",
-)
-@click.option(
-    "--from-repo",
-    "source_repo",
-    default=None,
-    metavar="OWNER/REPO",
-    help="Fetch DeepWiki docs for a GitHub repo and use as context for --ai.",
-)
+@click.option("--from", "source_path", default=None, type=click.Path(exists=True, resolve_path=True), help="Source path to distill.")
+@click.option("--ai", "use_llm", is_flag=True, default=False, help="Generate SKILL.md with LLM (requires API key).")
+@click.option("--model", "llm_model", default=None, envvar="ASM_LLM_MODEL", help="LiteLLM model.")
+@click.option("--from-url", "source_url", default=None, metavar="URL", help="URL content as context for --ai.")
+@click.option("--from-repo", "source_repo", default=None, metavar="OWNER/REPO", help="GitHub repo (DeepWiki) as context for --ai.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def create_skill(
     name_arg: str,
@@ -198,21 +151,7 @@ def create_skill(
     source_repo: str | None,
     root: str,
 ) -> None:
-    """Create a new skill package from scratch or distilled patterns.
-
-    NAME is the kebab-case skill identifier.
-    DESCRIPTION is a concise explanation for agent triggering.
-
-    With --ai, uses LiteLLM to generate Instructions, Usage, and Examples.
-    With --from-repo, analyzes a GitHub repo (README, structure, source)
-    to extract sophisticated patterns into the skill.
-
-    Examples:
-      asm create skill cli-patterns "Reusable CLI command patterns"
-      asm create skill discovery-notes "Discovery ranking guidance" --from ./src/asm/services/discovery.py
-      asm create skill pdf-helper "Extract text from PDFs" --ai
-      asm create skill sqlmodel-patterns "Async SQLModel usage" --from-repo tiangolo/sqlmodel
-    """
+    """Create a skill (optionally from source, URL, or AI)."""
     from asm.services import bootstrap, skills
 
     root_path = _require_workspace(root)
@@ -263,24 +202,15 @@ def create_skill(
 @create.command("expertise")
 @click.argument("name_arg", metavar="NAME")
 @click.argument("skills_list", nargs=-1, required=True, metavar="SKILL...")
-@click.option("--description", "--desc", "description", required=True, help="Description of the expertise domain.")
+@click.option("--description", "--desc", "description", required=True, help="Expertise description.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def create_expertise_cmd(name_arg: str, skills_list: tuple[str, ...], description: str, root: str) -> None:
-    """Bundle installed skills into a task-oriented expertise.
-
-    NAME is the kebab-case expertise identifier.
-    SKILL... are names of installed skills to bundle.
-
-    Expertises provide a navigation index and relationship rules for agents.
-
-    Examples:
-      asm create expertise db-layer sql sqlmodel-database --desc "Database schema and migrations"
-    """
+    """Bundle installed skills into an expertise."""
     from asm.services import bootstrap, expertise
 
     root_path = _require_workspace(root)
@@ -303,7 +233,52 @@ def create_expertise_cmd(name_arg: str, skills_list: tuple[str, ...], descriptio
 
 @cli.group("expertise")
 def expertise_group() -> None:
-    """Expertise matching, autonomous selection, and routing evaluation."""
+    """Match tasks to expertises and run routing evals."""
+
+
+@expertise_group.command("list")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root.",
+)
+def expertise_list(root: str) -> None:
+    """List expertises defined in the workspace."""
+    from asm.repo import config
+
+    root_path = _require_workspace(root)
+    cfg = config.load(root_path / paths.ASM_TOML)
+    if not cfg.expertises:
+        click.echo("ℹ No expertises. Create one with `asm create expertise`.")
+        return
+    for name in cfg.expertises:
+        click.echo(f"- {name}")
+
+
+@expertise_group.command("skills")
+@click.argument("expertise_name", metavar="EXPERTISE")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root.",
+)
+def expertise_skills(expertise_name: str, root: str) -> None:
+    """List skills in an expertise."""
+    from asm.repo import config
+
+    root_path = _require_workspace(root)
+    cfg = config.load(root_path / paths.ASM_TOML)
+    ref = cfg.expertises.get(expertise_name)
+    if not ref:
+        available = ", ".join(cfg.expertises.keys()) or "none"
+        raise click.ClickException(f"Expertise '{expertise_name}' not found. Available: {available}")
+    if not ref.skills:
+        click.echo("ℹ No skills in this expertise.")
+        return
+    for name in ref.skills:
+        click.echo(f"- {name}")
 
 
 @expertise_group.command("suggest")
@@ -312,16 +287,10 @@ def expertise_group() -> None:
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def expertise_suggest(task_description: str, root: str) -> None:
-    """Match a natural language task to existing expertises.
-
-    Uses semantic similarity to rank bundles by relevance to your task.
-
-    Examples:
-      asm expertise suggest "write a database migration for users"
-    """
+    """Suggest expertises for a task description."""
     from asm.services import expertise
 
     root_path = _require_workspace(root)
@@ -339,29 +308,15 @@ def expertise_suggest(task_description: str, root: str) -> None:
 
 @expertise_group.command("auto")
 @click.argument("task_description")
-@click.option(
-    "--model",
-    "llm_model",
-    default=None,
-    envvar="ASM_LLM_MODEL",
-    help="LiteLLM model string for skill selection.",
-)
+@click.option("--model", "llm_model", default=None, envvar="ASM_LLM_MODEL", help="LiteLLM model.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def expertise_auto(task_description: str, llm_model: str | None, root: str) -> None:
-    """Autonomous expertise configuration: match, install, and sync.
-
-    Finds the best matching expertise for your task. If no good match
-    exists, uses AI to select relevant skills and creates a new bundle.
-    Automatically installs missing skills and syncs agent context.
-
-    Examples:
-      asm expertise auto "build a REST API with database migrations"
-    """
+    """Auto-configure expertises for a task (install + sync)."""
     from asm.services import bootstrap, expertise
 
     root_path = _require_workspace(root)
@@ -383,20 +338,15 @@ def expertise_auto(task_description: str, llm_model: str | None, root: str) -> N
 
 
 @expertise_group.command("eval")
-@click.option(
-    "--dataset",
-    required=True,
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
-    help="Routing benchmark dataset (.json or .jsonl).",
-)
-@click.option("--top-k", default=3, type=int, show_default=True, help="Top-k hit-rate window.")
-@click.option("--min-top1", default=None, type=float, help="Fail if top-1 accuracy is below this threshold [0..1].")
-@click.option("--min-topk", default=None, type=float, help="Fail if top-k hit-rate is below this threshold [0..1].")
+@click.option("--dataset", required=True, type=click.Path(exists=True, dir_okay=False, resolve_path=True), help="Benchmark file (.json/.jsonl).")
+@click.option("--top-k", default=3, type=int, show_default=True, help="Top-k window.")
+@click.option("--min-top1", default=None, type=float, help="Fail if top-1 below [0..1].")
+@click.option("--min-topk", default=None, type=float, help="Fail if top-k below [0..1].")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def expertise_eval(
     dataset: str,
@@ -405,15 +355,7 @@ def expertise_eval(
     min_topk: float | None,
     root: str,
 ) -> None:
-    """Run deterministic routing benchmarks and enforce quality gates.
-
-    Uses current expertise routing against a fixed benchmark file.
-    Prints top-1/top-k/MRR and fails when optional thresholds are missed.
-
-    Examples:
-      asm expertise eval --dataset ./tests/routing_benchmark.jsonl
-      asm expertise eval --dataset ./tests/routing_benchmark.json --min-top1 0.80 --min-topk 0.95
-    """
+    """Run routing benchmark; optional min-top1/min-topk gates."""
     from asm.services import expertise
 
     if top_k < 1:
@@ -462,16 +404,10 @@ def expertise_eval(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def sync(root: str) -> None:
-    """Install missing skills and sync agent configuration.
-
-    Reads the [skills] and [expertises] tables, fetches missing resources,
-    verifies integrity, and regenerates IDE agent integration files.
-
-    Like `uv sync` — run after cloning a repo or pulling changes.
-    """
+    """Install missing skills and regenerate agent config."""
     import time
 
     from asm.services import bootstrap, skills
@@ -521,7 +457,7 @@ def sync(root: str) -> None:
 
 @cli.command("update")
 def update() -> None:
-    """Update ASM from official release wheel or source."""
+    """Update asm from latest wheel or git."""
 
     try:
         subprocess.run(["uv", "tool", "uninstall", "asm"], check=False)
@@ -555,7 +491,27 @@ def update() -> None:
 
 @cli.group("skill")
 def skill_group() -> None:
-    """Manage local skill versions and snapshots."""
+    """Skill versioning and snapshots."""
+
+
+@skill_group.command("list")
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root.",
+)
+def skill_list(root: str) -> None:
+    """List skills registered in the workspace."""
+    from asm.repo import config
+
+    root_path = _require_workspace(root)
+    cfg = config.load(root_path / paths.ASM_TOML)
+    if not cfg.skills:
+        click.echo("ℹ No skills. Add with `asm add skill` or create with `asm create skill`.")
+        return
+    for name in cfg.skills:
+        click.echo(f"- {name}")
 
 
 @skill_group.command("commit")
@@ -565,14 +521,10 @@ def skill_group() -> None:
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_commit(name: str, message: str, root: str) -> None:
-    """Commit local changes of a skill.
-
-    Examples:
-      asm skill commit cli-builder -m "tighten option parsing checklist"
-    """
+    """Commit local skill changes."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -586,24 +538,20 @@ def skill_commit(name: str, message: str, root: str) -> None:
 
 @skill_group.group("stash")
 def skill_stash_group() -> None:
-    """Save/apply temporary working snapshots."""
+    """Stash or apply working snapshots."""
 
 
 @skill_stash_group.command("push")
 @click.argument("name")
-@click.option("-m", "--message", default="", help="Optional stash note.")
+@click.option("-m", "--message", default="", help="Stash note.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_stash_push(name: str, message: str, root: str) -> None:
-    """Stash current skill working tree.
-
-    Examples:
-      asm skill stash push cli-builder -m "wip: improve examples"
-    """
+    """Stash skill working tree."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -617,20 +565,15 @@ def skill_stash_push(name: str, message: str, root: str) -> None:
 @skill_stash_group.command("apply")
 @click.argument("name")
 @click.argument("stash_id", required=False)
-@click.option("--pop", is_flag=True, help="Drop the stash entry after applying it.")
+@click.option("--pop", is_flag=True, help="Drop stash after apply.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_stash_apply(name: str, stash_id: str | None, pop: bool, root: str) -> None:
-    """Apply latest (or selected) stash for a skill.
-
-    Examples:
-      asm skill stash apply cli-builder
-      asm skill stash apply cli-builder <stash-id> --pop
-    """
+    """Apply latest or selected stash."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -650,10 +593,10 @@ def skill_stash_apply(name: str, stash_id: str | None, pop: bool, root: str) -> 
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_tag(name: str, tag: str, ref: str, root: str) -> None:
-    """Tag a skill snapshot (default: HEAD)."""
+    """Tag a skill snapshot (default HEAD)."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -667,15 +610,15 @@ def skill_tag(name: str, tag: str, ref: str, root: str) -> None:
 @skill_group.command("checkout")
 @click.argument("name")
 @click.argument("ref")
-@click.option("--force", is_flag=True, help="Discard uncommitted local changes.")
+@click.option("--force", is_flag=True, help="Discard local changes.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_checkout(name: str, ref: str, force: bool, root: str) -> None:
-    """Checkout a snapshot/tag into working skill dir."""
+    """Checkout snapshot/tag into skill dir."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -689,19 +632,15 @@ def skill_checkout(name: str, ref: str, force: bool, root: str) -> None:
 
 @skill_group.command("history")
 @click.argument("name")
-@click.option("--limit", default=20, type=int, show_default=True, help="Maximum history entries.")
+@click.option("--limit", default=20, type=int, show_default=True, help="Max entries.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_history(name: str, limit: int, root: str) -> None:
-    """Show recent commit/import history for a skill.
-
-    Examples:
-      asm skill history cli-builder --limit 10
-    """
+    """Show skill commit/import history."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -723,10 +662,10 @@ def skill_history(name: str, limit: int, root: str) -> None:
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_status(name: str, root: str) -> None:
-    """Show unstaged changes for a skill."""
+    """Show skill unstaged changes."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -756,10 +695,10 @@ def skill_status(name: str, root: str) -> None:
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def skill_diff(name: str, rel_path: str | None, root: str) -> None:
-    """Show unstaged unified diff for a skill (optionally one file)."""
+    """Show skill unstaged diff (optional: one file)."""
     from asm.services import skills
 
     root_path = _require_workspace(root)
@@ -779,19 +718,19 @@ def skill_diff(name: str, rel_path: str | None, root: str) -> None:
 
 @cli.group("lock")
 def lock_group() -> None:
-    """Manage asm.lock schema/versioning."""
+    """Lockfile schema and versioning."""
 
 
 @lock_group.command("migrate")
-@click.option("--registry-id", default="default", show_default=True, help="Registry id to write in lock entries.")
+@click.option("--registry-id", default="default", show_default=True, help="Registry id for lock entries.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
-    help="Project root directory.",
+    help="Project root.",
 )
 def lock_migrate(registry_id: str, root: str) -> None:
-    """Migrate asm.lock to the current lock schema."""
+    """Migrate asm.lock to current schema."""
     from asm.repo import lockfile
 
     root_path = _require_workspace(root)
@@ -820,6 +759,26 @@ def _validate_gate_threshold(name: str, value: float | None) -> None:
         return
     if not 0.0 <= value <= 1.0:
         raise click.ClickException(f"--{name} must be between 0 and 1")
+
+
+def _hint_for_add_skill_source_error(source: str, error_message: str) -> str:
+    """Return a user-facing hint when add skill input looks like a bare name."""
+    if "Cannot parse GitHub reference" not in error_message:
+        return ""
+
+    token = source.strip()
+    if not token or "/" in token or ":" in token or "://" in token:
+        return ""
+    if token.startswith((".", "/", "~")):
+        return ""
+
+    return (
+        "`asm add skill` expects a SOURCE reference, not a skill name.\n"
+        "Try one of:\n"
+        "  - asm add skill pb:openclaw/skills/sql\n"
+        "  - asm add skill https://playbooks.com/skills/openclaw/skills/sql\n"
+        "If the skill is already listed in `asm.toml`, run `asm sync`."
+    )
 
 
 def _resolve_sync_targets(root: Path, cfg, explicit: str | None) -> list[str]:

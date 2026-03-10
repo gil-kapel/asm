@@ -1,6 +1,6 @@
 """LLM-backed generation for skill content.
 
-Uses LiteLLM when the [llm] extra is installed.
+Uses LiteLLM for completions (required dependency).
 Provides a robust client with centralized configuration and error handling.
 """
 
@@ -45,7 +45,7 @@ class LLMClient:
             import litellm  # noqa: F401
         except ImportError as e:
             raise LLMError(
-                "LLM support requires the [llm] extra. Install with: uv pip install asm[llm]"
+                "LLM support requires litellm. Reinstall asm: uv tool install asm or pip install -U asm"
             ) from e
 
     def completion(

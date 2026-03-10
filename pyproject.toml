@@ -6,20 +6,31 @@ build-backend = "hatchling.build"
 name = "asm"
 version = "0.1.0"
 description = "Agent Skill Manager — SOTA expertise for IDE agents"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
     "httpx>=0.28",
-    "tomlkit>=0.12",
+    "litellm>=1.50",
     "msgpack>=1.1.0",
+    "tomlkit>=0.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/gil-kapel/asm"
+Repository = "https://github.com/gil-kapel/asm"
+Changelog = "https://github.com/gil-kapel/asm/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
-llm = ["litellm>=1.50"]
 test = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.23",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
 ]
 
 [project.scripts]

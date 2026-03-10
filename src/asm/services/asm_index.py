@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -20,7 +21,12 @@ _REMOTE_INDEX_URL = (
     "https://raw.githubusercontent.com/gil-kapel/asm/main/registry/index.json"
 )
 _CACHE_MAX_AGE_S = 3600 * 6  # refresh every 6 hours
-_MIN_QUALITY = 0.0  # return all entries; let scoring handle ranking
+_MIN_SIMILARITY = 0.28  # don't return curated items when query is unrelated (avoids nonsense results)
+
+
+def _query_tokens(text: str) -> set[str]:
+    """Tokenize for lexical gate; must match discovery so query terms can match entries."""
+    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= 2}
 
 
 def _user_cache_path() -> Path:
@@ -83,6 +89,7 @@ def search(query: str) -> list[DiscoveryItem]:
     if not entries:
         return []
 
+    q_tokens = _query_tokens(query)
     query_vec = embeddings.embed(query)
 
     haystacks = [
@@ -91,17 +98,24 @@ def search(query: str) -> list[DiscoveryItem]:
     ]
     entry_vecs = embeddings.embed_batch(haystacks)
 
-    scored: list[tuple[float, dict]] = []
-    for entry, h_vec in zip(entries, entry_vecs):
+    scored: list[tuple[float, float, dict]] = []
+    for entry, h_vec, haystack in zip(entries, entry_vecs, haystacks):
+        # Lexical gate: require at least one query token in entry (works without API; avoids hash-fallback nonsense)
+        if q_tokens:
+            haystack_tokens = _query_tokens(haystack)
+            if not (q_tokens & haystack_tokens):
+                continue
         quality = float(entry.get("quality_score", 0.5))
         sim = embeddings.cosine_similarity(query_vec, h_vec)
+        if sim < _MIN_SIMILARITY:
+            continue
         score = 0.6 * sim + 0.4 * quality
-        scored.append((score, entry))
+        scored.append((score, sim, entry))
 
     scored.sort(key=lambda t: t[0], reverse=True)
 
     out: list[DiscoveryItem] = []
-    for score, entry in scored:
+    for score, _sim, entry in scored:
         name = entry.get("name", "")
         if not name:
             continue

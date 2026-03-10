@@ -9,6 +9,7 @@ ASM_TOML = "asm.toml"
 ASM_LOCK = "asm.lock"
 MAIN_ASM_MD = "main_asm.md"
 SKILLS_DIR = "skills"
+EXPERTISES_DIR = "expertises"
 OBJECTS_DIR = "objects"
 HISTORY_DIR = "history"
 STASH_DIR = "stash"
@@ -29,6 +30,10 @@ def asm_dir(root: Path) -> Path:
 
 def skills_dir(root: Path) -> Path:
     return asm_dir(root) / SKILLS_DIR
+
+
+def expertises_dir(root: Path) -> Path:
+    return asm_dir(root) / EXPERTISES_DIR
 
 
 def main_asm_path(root: Path) -> Path:

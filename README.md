@@ -11,21 +11,32 @@
 
 ASM manages a project-local `.asm/` skill graph and syncs it into Cursor / Claude / Codex.
 
-- **Curated Index**: Access verified, high-quality skills with non-obvious knowledge and actionable patterns.
-- **Semantic Search**: Native embedding-based ranking (LiteLLM/OpenAI) with local caching for sub-second relevance.
+- **Curated Index**: Verified, high-quality skills with non-obvious knowledge and actionable patterns.
 - **Expertise Layer**: Bundle skills into task-oriented domains for autonomous agent selection and auto-configuration.
-- **Advanced Skill Creation**: Distill complex patterns from GitHub repos (README, source, structure) using AI.
-- **Lock Reproducibility**: Pin SHA-256 integrity hashes in `asm.lock` for consistent environments.
-- **Zero-Touch Sync**: Automatically update agent context whenever skills or expertises change.
+- **Semantic Search**: Embedding-based lookup (via LiteLLM) with local caching for sub-second relevance.
+- **Reproducible Graphs**: `asm.toml` + `asm.lock` pin exact skill sources and hashes.
+- **Zero-Touch Sync**: Keeps Cursor / Claude / Codex configs in sync with your `.asm/` graph.
 
-[Quick Start](#quick-start) · [Usage](#usage) · [Agent Integration](#agent-integration) · [CLI Reference](#cli-reference)
+[Quick Start](#quick-start) · [Example workflows](#example-workflows) · [Usage](#usage) · [How skill graphs work](#how-skill-graphs-work) · [CLI map](#cli-map) · [Agent Integration](#agent-integration)
+
+## TL;DR
+
+- **What ASM is**: A project-local skill manager for agents that installs skills into `.asm/`, bundles them into *expertises*, and syncs a single `main_asm.md` index that your IDE agents read first.
+- **Why you care**: New projects (or new machines) can get the exact same "brain" in one command (`asm sync`), instead of copy-pasting prompts and skills by hand.
+- **Fast path**:
+  1. `curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh`
+  2. `asm init` in your repo
+  3. `asm search "<your stack or problem>"` → `asm add skill <source>`
+  4. `asm expertise auto "<task description>"` → `asm sync`
 
 ## Copy Prompt For Your Agent
+
+Use this prompt in **any** agent (Cursor, Claude Code, Codex, or other) to set up ASM in the project.
 
 ```text
 Set up ASM in this project end-to-end.
 
-ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent config (Cursor/Claude/Codex).
+ASM (Agent Skill Manager) is a project-local skill orchestrator. It installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent’s config — whether you are Cursor, Claude Code, Codex, or another agent that reads SKILL.md / CLAUDE.md / AGENTS.md.
 
 1) Install ASM:
    curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
@@ -33,24 +44,25 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
 2) Initialize ASM in the current project root:
    asm init
 
-3) (Optional) Configure SkillsMP/LLM access at user level:
-   - set `SKILLSMP_API_KEY` or `OPENAI_API_KEY` in ~/.asm-cli/.env for semantic discovery and AI skill creation.
+3) (Optional) For semantic search and AI-generated skills:
+   - set `SKILLSMP_API_KEY` or `OPENAI_API_KEY` in ~/.asm-cli/.env
 
-4) Discover and install the most relevant curated skills:
+4) Discover and install relevant skills:
    - run `asm search <query>` to find verified skills (marked [curated])
    - run `asm add skill <source>` for each selected skill
+   - To create a skill from a GitHub repo: asm create skill <name> "<description>" --from-repo owner/repo --ai
+   - Optional: install a skill-creator skill for guided creation: asm search "skill creator" then asm add skill <source>
 
-5) Automate expertise configuration for your task:
-   - describe what you want to do in natural language
+5) Automate expertise for your task:
    - run `asm expertise auto "<task description>"`
-   - ASM will autonomously match your task to expertise bundles, install missing skills, and sync your agent context.
+   - ASM will match your task to expertise bundles, install missing skills, and sync agent context.
 
-6) Sync integrations:
+6) Sync into this agent’s config:
    asm sync
 
 7) Output:
    - list installed skills and active expertises
-   - confirm which agent integration was synced
+   - confirm which agent(s) were synced (e.g. Cursor → .cursor/skills/asm, Claude Code → .claude/skills/asm + CLAUDE.md, Codex → AGENTS.md)
 ```
 
 ## Quick Start
@@ -73,6 +85,73 @@ asm expertise eval --dataset ./tests/routing_benchmark.jsonl --min-top1 0.80 --m
 # 5) Sync into active agent context
 asm sync
 ```
+
+## Example workflows
+
+### 1. Onboard into an existing repo
+
+```bash
+git clone https://github.com/your-org/your-repo.git
+cd your-repo
+asm sync
+```
+
+Example output:
+
+```text
+↓ sqlmodel-database (github:tiangolo/sqlmodel)… 
+✔ sqlmodel-database installed (320ms)
+✔ sql (no lock entry)
+  ↻ synced cursor → .cursor/skills/asm/SKILL.md
+✔ Synced 2 skill(s) in 0.6s
+```
+
+Now your agent sees the same skills and expertises as the rest of the team.
+
+### 2. Discover and install a curated skill
+
+```bash
+cd ~/my-project
+asm init
+asm search "sqlmodel repository" --limit 3
+asm add skill pb:openclaw/skills/sql
+```
+
+Example output:
+
+```text
+Found 1 result(s):
+1. [playbooks] sql
+   id: openclaw/skills/sql
+   url: https://playbooks.com/skills/openclaw/skills/sql
+   source: pb:openclaw/skills/sql
+   SQL utility patterns for agents
+
+↓ sql (pb:openclaw/skills/sql)…
+✔ sql installed (410ms)
+  ↻ synced cursor → .cursor/skills/asm/SKILL.md
+✔ Installed skill: sql
+  SQL utility patterns for agents
+  → .asm/skills/sql/SKILL.md
+```
+
+### 3. Let ASM build an expertise bundle for a task
+
+```bash
+asm expertise auto "build a REST API with database migrations"
+```
+
+Example output:
+
+```text
+Matching task to expertises…
+✔ Expertise: db-layer-plus
+  Skills: sqlmodel-database, sql, python-testing
+  → .asm/expertises/db-layer-plus/index.md
+  ↻ synced cursor → .cursor/skills/asm/SKILL.md
+```
+
+Your agent now has a guided path (via the expertise docs) instead of a flat pile of skills.
 
 ## Install
 
@@ -140,6 +219,16 @@ asm update
 uv tool uninstall asm && rm -rf ~/.asm-cli
 ```
 
+## Releases & Changelog
+
+- **Versioning**: ASM follows semantic versioning (`MAJOR.MINOR.PATCH`), with the canonical version defined in `pyproject.toml`.
+- **Changelog**: All notable changes are recorded in `CHANGELOG.md` (Keep a Changelog format).
+- **Release flow** (manual, via Git tags and GitHub releases):
+  1. Update the version in `pyproject.toml`.
+  2. Update `CHANGELOG.md`, moving entries from **Unreleased** into a new version section.
+  3. Commit changes and create a tag, e.g. `git tag v0.1.0`.
+  4. Build wheels with `uv build` and attach them to a GitHub release for that tag.
+
 ## Usage
 
 ### Initialise a workspace
@@ -173,6 +262,20 @@ asm add skill user/repo/path --name my-refactor
 ```
 
 ASM clones the skill, validates its `SKILL.md`, installs it under `.asm/skills/`, and updates `asm.toml` + `asm.lock`.
+
+Important: `asm add skill` requires a source reference, not a skill name.
+
+```bash
+# Invalid (skill name only)
+asm add skill sql
+
+# Valid (provider ref or URL)
+asm add skill pb:openclaw/skills/sql
+asm add skill https://playbooks.com/skills/openclaw/skills/sql
+
+# If already declared in asm.toml, install all missing declared skills
+asm sync
+```
 
 ### Add a local skill
 
@@ -295,7 +398,7 @@ asm create skill auth-utils "Project auth conventions" --from ./src/auth/ --ai
 ASM can generate SKILL.md content (Instructions, Usage, Examples) using an LLM via [LiteLLM](https://github.com/BerriAI/litellm). Install the optional extra and set a provider API key:
 
 ```bash
-uv pip install asm[llm]
+uv tool install asm   # or: pip install asm
 export OPENAI_API_KEY=sk-...   # or ANTHROPIC_API_KEY, etc.
 ```
 
@@ -415,10 +518,10 @@ ASM skills live in `.asm/`, but each IDE agent reads its own config location. Ag
 
 ### What gets generated
 
-| Agent | File | Behaviour |
+| Agent | File(s) | Behaviour |
 |---|---|---|
-| Cursor | `.cursor/skills/asm/SKILL.md` | Cursor skill pointing to `.asm/main_asm.md` |
-| Claude Code | `CLAUDE.md` | Sentinel-guarded section (preserves your content) |
+| Cursor | `.cursor/skills/asm/SKILL.md` | Router skill pointing to `.asm/main_asm.md` |
+| Claude Code | `CLAUDE.md` + `.claude/skills/asm/SKILL.md` | Sentinel in CLAUDE.md; router skill in `.claude/skills/` for Claude Code discovery |
 | Codex | `AGENTS.md` | Sentinel-guarded section (preserves your content) |
 
 ### Context-aware sync vs explicit config
@@ -449,7 +552,7 @@ codex = false
 
 When `[agents]` is configured, only those set to `true` are synced.
 
-## How it works
+## How skill graphs work
 
 ```
 asm.toml          Declares which skills are active + their sources
@@ -459,6 +562,22 @@ asm.lock          Pins SHA-256 integrity hashes for reproducibility
 ```
 
 When an agent starts a task, it reads `.asm/main_asm.md`, which lists every installed skill and points to its `SKILL.md`. The agent follows the blueprints, templates, and pitfall warnings defined in each skill — producing code that matches curated expertise instead of generic completions.
+
+High-level flow:
+
+```mermaid
+graph TD
+  A[asm.toml] --> B[.asm/skills/*]
+  A --> C[.asm/expertises/*]
+  B --> D[.asm/main_asm.md]
+  C --> D
+  D --> E[Cursor/Claude/Codex configs]
+  E --> F[Your agent runtime]
+```
+
+- **Skills** live under `.asm/skills/*/SKILL.md` and hold reusable blueprints.
+- **Expertises** (`.asm/expertises/*`) wire multiple skills together for a domain.
+- **`main_asm.md`** is the single entrypoint agents read to discover what they can do.
 
 ### Skill anatomy
 
@@ -492,13 +611,21 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
                       ──► agent configs      (Cursor / Claude / Codex)
 ```
 
-## CLI Reference
+## CLI map
+
+- **Workspace bootstrap**: `asm init`, `asm sync`, `asm lock migrate`
+- **Skill lifecycle**: `asm search`, `asm add skill`, `asm skill list`, `asm create skill`, `asm skill …`
+- **Expertise & routing**: `asm create expertise`, `asm expertise list`, `asm expertise skills`, `asm expertise suggest`, `asm expertise auto`, `asm expertise eval`
+- **ASM itself**: `asm update`, `asm --version`
+
+### Full CLI reference
 
 | Command | Description |
 |---|---|
 | `asm init` | Initialise workspace (`asm.toml` + `.asm/`) |
 | `asm search <query>` | Federated discovery across healthy registries/providers |
 | `asm add skill <source>` | Install a skill from GitHub or local path |
+| `asm skill list` | List skills registered in the workspace |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
 | `asm sync` | Install missing skills, verify integrity, sync agent configs |
@@ -513,6 +640,37 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm skill diff <name> [rel_path]` | Show unified diff vs locked snapshot |
 | `asm lock migrate` | Upgrade `asm.lock` schema in place |
 | `asm create expertise <name> <skills...>` | Bundle skills into a task-oriented domain |
+| `asm expertise list` | List expertises defined in the workspace |
+| `asm expertise skills <name>` | List skills in an expertise |
+| `asm expertise suggest <task>` | Match a task to existing expertises (semantic) |
+| `asm expertise auto <task>` | Autonomous match/create and configuration |
+| `asm expertise eval --dataset <file>` | Evaluate routing quality (top-1/top-k/MRR) and enforce gates |
+| `asm --version` | Print version |
+
+## CLI Reference
+
+| Command | Description |
+|---|---|
+| `asm init` | Initialise workspace (`asm.toml` + `.asm/`) |
+| `asm search <query>` | Federated discovery across healthy registries/providers |
+| `asm add skill <source>` | Install a skill from GitHub or local path |
+| `asm skill list` | List skills registered in the workspace |
+| `asm create skill <name> <desc>` | Scaffold a new skill package |
+| `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
+| `asm sync` | Install missing skills, verify integrity, sync agent configs |
+| `asm update` | Update ASM CLI in place (no manual uninstall required) |
+| `asm skill commit <name> -m <msg>` | Create a new local skill revision |
+| `asm skill stash push <name> [-m <msg>]` | Save WIP snapshot without version bump |
+| `asm skill stash apply <name> [stash_id]` | Restore a stashed snapshot |
+| `asm skill tag <name> <tag> [ref]` | Assign a tag to HEAD or a snapshot ref |
+| `asm skill checkout <name> <ref>` | Materialize a tagged/snapshotted version |
+| `asm skill history <name>` | Show recent version history for a skill |
+| `asm skill status <name>` | Show unstaged file status vs locked snapshot |
+| `asm skill diff <name> [rel_path]` | Show unified diff vs locked snapshot |
+| `asm lock migrate` | Upgrade `asm.lock` schema in place |
+| `asm create expertise <name> <skills...>` | Bundle skills into a task-oriented domain |
+| `asm expertise list` | List expertises defined in the workspace |
+| `asm expertise skills <name>` | List skills in an expertise |
 | `asm expertise suggest <task>` | Match a task to existing expertises (semantic) |
 | `asm expertise auto <task>` | Autonomous match/create and configuration |
 | `asm expertise eval --dataset <file>` | Evaluate routing quality (top-1/top-k/MRR) and enforce gates |
@@ -536,6 +694,11 @@ Build release wheel artifacts:
 This generates:
 - `dist/release/asm-<version>-py3-none-any.whl` (versioned artifact)
 - `dist/release/asm-py3-none-any.whl` (stable release asset name used by installer/update)
+
+**Docs & GitHub Pages**
+
+- Local: `uv sync --extra docs && uv run mkdocs serve` → http://127.0.0.1:8000
+- Publish to GitHub Pages: push to `main` runs [`.github/workflows/deploy-docs.yml`](.github/workflows/deploy-docs.yml) and deploys the built site. **One-time:** Repo → **Settings** → **Pages** → **Build and deployment** → Source: **GitHub Actions**. Site URL: `https://<user>.github.io/asm/` (or your custom domain if set in Pages settings).
 
 The CLI entry point is `src/asm/cli/__init__.py`, registered as `asm` via `pyproject.toml`:
 
