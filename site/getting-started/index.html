@@ -279,6 +279,25 @@
   
   
     <li class="md-tabs__item">
+      <a href="../cloud-analyzer/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Cloud analyzer
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
       <a href="../expertises/" class="md-tabs__link">
         
   
@@ -530,6 +549,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#6-optional-turn-on-cloud-skill-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Optional: turn on cloud skill analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -563,6 +593,33 @@
     
   
     CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cloud-analyzer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloud analyzer
   
 
     
@@ -624,10 +681,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
             
   
   
@@ -645,8 +702,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -800,6 +857,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#6-optional-turn-on-cloud-skill-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Optional: turn on cloud skill analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -865,11 +933,23 @@
 <h2 id="4-match-your-task-to-an-expertise">4. Match your task to an expertise</h2>
 <p>So agents know which skills to use for your task, match it to an expertise: run <code>asm expertise suggest "&lt;task&gt;"</code> to see matches, then <code>asm expertise auto "&lt;task&gt;"</code> to match or create an expertise, install any missing skills, and sync. This is how routing-by-expertise is configured.</p>
 <h2 id="5-wire-up-agent-integrations">5. Wire up agent integrations</h2>
-<p>After adding or changing skills or expertises, run <code>asm sync</code>. ASM regenerates <code>.asm/main_asm.md</code> from your <strong>expertises</strong> (and skills) and updates your IDE agent configs (Cursor / Claude / Codex). See the <a href="../cli/">CLI reference</a> and the README’s <strong>Agent Integration</strong> section for details.</p>
+<p>After adding or changing skills or expertises, run <code>asm sync</code>. ASM regenerates <code>.asm/main_asm.md</code> from your <strong>expertises</strong> (and skills) and updates your IDE agent configs (Cursor / Claude / Codex / GitHub Copilot). See the <a href="../cli/">CLI reference</a> and the README’s <strong>Agent Integration</strong> section for details.</p>
+<h2 id="6-optional-turn-on-cloud-skill-analysis">6. Optional: turn on cloud skill analysis</h2>
+<p>Set the cloud analyzer URL in a user-level ASM env file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>~/.asm-cli
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>cat<span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.asm-cli/.env<span class="w"> </span><span class="s">&lt;&lt;&#39;EOF&#39;</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="s">ASM_CLOUD_API_URL=http://127.0.0.1:8000</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="s">EOF</span>
+</code></pre></div>
+<p>Then analyze one local skill:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>asm<span class="w"> </span>skill<span class="w"> </span>analyze<span class="w"> </span>my-skill<span class="w"> </span>--cloud
+</code></pre></div>
+<p>ASM stores the latest scorecard under <code>.asm/analysis/my-skill/</code>.</p>
 <h2 id="next-steps">Next steps</h2>
 <ul>
 <li><a href="../expertises/">Expertises</a> — why expertises and how routing works</li>
 <li><a href="../cli/">CLI reference</a> — full command list and options</li>
+<li><a href="../cloud-analyzer/">Cloud analyzer</a> — config, local backend run, and artifact storage</li>
 <li><a href="../skills/authoring/">Authoring skills</a> — create and bundle skills</li>
 <li><a href="https://github.com/gil-kapel/asm">README on GitHub</a> — copy-paste prompt and full docs</li>
 </ul>

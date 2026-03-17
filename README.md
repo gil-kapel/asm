@@ -34,35 +34,50 @@ ASM manages a project-local `.asm/` skill graph and syncs it into Cursor / Claud
 Use this prompt in **any** agent (Cursor, Claude Code, Codex, GitHub Copilot, or other) to set up ASM in the project.
 
 ```text
-Set up ASM in this project end-to-end.
+Set up ASM in this project and leave it in a working state.
 
-ASM (Agent Skill Manager) is a project-local skill orchestrator. It installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent’s config — whether you are Cursor, Claude Code, Codex, GitHub Copilot, or another agent that reads SKILL.md / CLAUDE.md / AGENTS.md / .github/skills/.
+ASM (Agent Skill Manager) is a project-local skill system. It installs skills into `.asm/`, builds `.asm/main_asm.md`, groups skills into expertises, and syncs the router into the active agent config.
 
-1) Install ASM:
-   curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
+Do this in order:
 
-2) Initialize ASM in the current project root:
-   asm init
+1. Check whether `asm` is already installed. If not, install it with:
+   `curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh`
 
-3) (Optional) For semantic search and AI-generated skills:
-   - set `SKILLSMP_API_KEY` or `OPENAI_API_KEY` in ~/.asm-cli/.env
+2. Check whether this repo already has ASM initialized by looking for `asm.toml`.
+   - If ASM is not initialized, run `asm init`.
+   - If ASM is already initialized, do not recreate it.
 
-4) Discover and install relevant skills:
-   - run `asm search <query>` to find verified skills (marked [curated])
-   - run `asm add skill <source>` for each selected skill
-   - To create a skill from a GitHub repo: asm create skill <name> "<description>" --from-repo owner/repo --ai
-   - Optional: install a skill-creator skill for guided creation: asm search "skill creator" then asm add skill <source>
+3. Inspect the current project briefly and choose the most relevant skill search queries for this repo.
+   - Prefer curated, high-signal skills.
+   - Do not install a large pile of generic skills.
 
-5) Automate expertise for your task:
-   - run `asm expertise auto "<task description>"`
-   - ASM will match your task to expertise bundles, install missing skills, and sync agent context.
+4. Search and install only the most relevant skills.
+   - Use `asm search "<query>"`.
+   - Use `asm add skill <source>` for the best matches.
 
-6) Sync into this agent’s config:
-   asm sync
+5. Configure expertise routing for the current project task or stack.
+   - Run `asm expertise auto "<task description>"` with a concrete description of what this project needs.
 
-7) Output:
-   - list installed skills and active expertises
-   - confirm which agent(s) were synced (e.g. Cursor → .cursor/skills/asm, Claude Code → .claude/skills/asm + CLAUDE.md, Codex → AGENTS.md, GitHub Copilot → .github/skills/asm)
+6. Sync ASM into the active agent config.
+   - Run `asm sync`.
+
+7. If `ASM_CLOUD_API_URL` is configured and there is at least one local skill worth checking, run one cloud analysis:
+   - `asm skill analyze <skill-name> --cloud`
+
+8. At the end, report:
+   - whether ASM was installed or already present
+   - whether the workspace was initialized or already initialized
+   - which skills were installed
+   - which expertise was selected or created
+   - which agent config(s) were synced
+   - whether cloud analysis was run, and where the scorecard was saved
+
+Success criteria:
+- `asm.toml` exists
+- `.asm/main_asm.md` exists
+- at least one relevant skill is installed
+- at least one expertise is active or created
+- agent sync completed successfully
 ```
 
 ## Quick Start
@@ -342,6 +357,67 @@ If you prefer shell profile exports, this also works:
 echo 'export SKILLSMP_API_KEY=sk_live_skillsmp_...' >> ~/.zshrc
 ```
 
+### Configure ASM cloud analyzer
+
+Skill analysis can run locally with LiteLLM or in the managed cloud.
+
+For local analysis, configure a model plus a provider key:
+
+```bash
+mkdir -p ~/.asm-cli
+cat >> ~/.asm-cli/.env <<'EOF'
+ASM_LLM_MODEL=openai/gpt-5-mini
+OPENAI_API_KEY=sk-...
+EOF
+```
+
+Run:
+
+```bash
+asm skill analyze my-skill --local
+asm skill analyze my-skill --local --model anthropic/claude-3-5-sonnet
+```
+
+For cloud analysis, set the analyzer URL in a user-level env file:
+
+```bash
+mkdir -p ~/.asm-cli
+cat >> ~/.asm-cli/.env <<'EOF'
+ASM_CLOUD_API_URL=http://127.0.0.1:8000
+ASM_CLOUD_API_KEY=dev-token
+EOF
+```
+
+Recognized user-level env locations:
+
+- `~/.asm-cli/.env`
+- `~/.config/asm/env`
+- `~/.config/asm/.env`
+
+Analyze one local skill:
+
+```bash
+asm skill analyze my-skill --local
+asm skill analyze my-skill --cloud
+asm skill analyze my-skill --cloud --api-url http://127.0.0.1:8000
+```
+
+ASM stores the latest scorecard under `.asm/analysis/<skill>/latest.json`.
+
+### Run the cloud MVP backend locally
+
+Install the optional cloud dependencies and run the FastAPI app:
+
+```bash
+uv sync --extra cloud
+uv run uvicorn backend.api:app --reload
+```
+
+Optional backend env vars:
+
+- `ASM_CLOUD_STORE`: directory used by the backend to persist analyses and manifest corpus
+- `ASM_CLOUD_ANALYZER_VERSION`: version string returned in scorecards
+
 
 ### Create a skill from scratch
 
@@ -385,11 +461,16 @@ Instead of manual writing, ASM can distill complex patterns from entire GitHub r
 # Create a skill from a GitHub repo (README, source files, and structure)
 asm create skill sqlmodel-patterns "Async SQLModel usage" --from-repo tiangolo/sqlmodel
 
+# Search GitHub for top repos, then enrich generation from those matches
+asm create skill sqlmodel-patterns "Async SQLModel usage" --github-search "sqlmodel fastapi async"
+
 # Create from a local module
 asm create skill auth-utils "Project auth conventions" --from ./src/auth/ --ai
 ```
 
 - **`--from-repo OWNER/REPO`**: Fetches the README, directory structure, and key source files via GitHub API as context for the LLM.
+- **`--github-search QUERY`**: Searches GitHub repositories, picks the top matches, and enriches the skill with DeepWiki-style repo context from those results.
+- **`--github-search-limit`**: Caps how many search-result repos are used for enrichment.
 - **`--ai`**: Use LiteLLM to generate sophisticated instructions, usage guidelines, and examples.
 - **`--from ./path`**: Analyzes local code to extract internal patterns and conventions.
 
@@ -407,12 +488,18 @@ Create a skill with generated content:
 ```bash
 asm create skill pdf-helper "Extract text and tables from PDFs" --ai
 asm create skill cli-ux "CLI UX patterns for Click" --ai --model anthropic/claude-3-5-sonnet
+asm create skill sqlmodel-database "Async SQLModel patterns" --loop --target-score 0.9 --max-tries 5
+asm create skill sqlmodel-database "Async SQLModel patterns" --github-search "sqlmodel alembic async"
 ```
 
 - **`--ai`**: Use LiteLLM to generate the skill description and body.
+- **`--loop`**: Turn on a local build -> analyze -> rewrite loop. ASM uses the local scorecard's `improvement_prompt` until the target score is reached or max tries is hit.
 - **`--model`**: LiteLLM model string (default: `openai/gpt-4o-mini`). Can be set with `ASM_LLM_MODEL`.
+- **`--target-score`**: Loop stop threshold from `0.0` to `1.0` for the aggregate local analysis score.
+- **`--max-tries`**: Maximum number of build/analyze/rewrite passes when `--loop` is enabled.
 - **`--from ./path`**: Local file or directory; the LLM receives its content as context.
 - **`--from-url URL`**: Fetch content from a URL and use it as context for the LLM. Supports GitHub API contents (e.g. `https://api.github.com/repos/owner/repo/contents/README.md?ref=main`) and raw URLs; directories are expanded by fetching each file.
+- **`--github-search QUERY`**: Search GitHub repos, fetch the top repo docs and key files, and use that bundle as extra LLM context.
 
 LiteLLM supports 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, etc.) with a single interface; set the corresponding API key and use the `provider/model-name` format for `--model`.
 
@@ -629,6 +716,8 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm search <query>` | Federated discovery across healthy registries/providers |
 | `asm add skill <source>` | Install a skill from GitHub or local path |
 | `asm skill list` | List skills registered in the workspace |
+| `asm skill analyze <name> --local` | Analyze one local skill with LiteLLM using `ASM_LLM_MODEL` and a provider API key |
+| `asm skill analyze <name> --cloud` | Submit one local skill to the optional ASM cloud analyzer |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
 | `asm sync` | Install missing skills, verify integrity, sync agent configs |
@@ -650,6 +739,31 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm expertise eval --dataset <file>` | Evaluate routing quality (top-1/top-k/MRR) and enforce gates |
 | `asm --version` | Print version |
 
+### Shell autocomplete
+
+ASM uses Click shell completion, including dynamic workspace values like installed skills, expertise names, snapshot refs, and stash ids.
+
+Enable it in zsh:
+
+```bash
+echo 'eval "$(_ASM_COMPLETE=zsh_source asm)"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Enable it in bash:
+
+```bash
+echo 'eval "$(_ASM_COMPLETE=bash_source asm)"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Enable it in fish:
+
+```bash
+mkdir -p ~/.config/fish/completions
+_ASM_COMPLETE=fish_source asm > ~/.config/fish/completions/asm.fish
+```
+
 ## CLI Reference
 
 | Command | Description |
@@ -658,6 +772,8 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm search <query>` | Federated discovery across healthy registries/providers |
 | `asm add skill <source>` | Install a skill from GitHub or local path |
 | `asm skill list` | List skills registered in the workspace |
+| `asm skill analyze <name> --local` | Analyze one local skill with LiteLLM using `ASM_LLM_MODEL` and a provider API key |
+| `asm skill analyze <name> --cloud` | Submit one local skill to the optional ASM cloud analyzer |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
 | `asm sync` | Install missing skills, verify integrity, sync agent configs |

@@ -65,6 +65,7 @@ nav:
   - Overview: index.md
   - Getting started: getting-started.md
   - CLI reference: cli.md
+  - Cloud analyzer: cloud-analyzer.md
   - Expertises: expertises.md
   - Skills:
       - Authoring skills: skills/authoring.md

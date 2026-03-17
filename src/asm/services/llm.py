@@ -96,6 +96,36 @@ class LLMClient:
 
         return self._parse_skill_response(content, description)
 
+    def revise_skill_content(
+        self,
+        name: str,
+        current_skill_md: str,
+        improvement_prompt: str,
+    ) -> Tuple[str, str]:
+        """Rewrite an existing skill using structured improvement guidance."""
+        system_prompt = (
+            "You are improving an existing ASM skill package.\n"
+            "- Preserve the skill's purpose, but rewrite it to improve routing precision, evidence grounding, and distinctness.\n"
+            "- Output only valid markdown.\n"
+            "- Return a one-line description, then the delimiter, then the full markdown body.\n"
+            f"- Use exactly '{BODY_DELIMITER}' on its own line between description and body."
+        )
+        user_prompt = (
+            f"Skill name: {name}\n\n"
+            f"Current SKILL.md:\n\n{current_skill_md[:20000]}\n\n"
+            f"Improvement prompt:\n\n{improvement_prompt}\n\n"
+            f"Respond with:\n1. A one-line description\n2. {BODY_DELIMITER}\n3. The full markdown body"
+        )
+        content = self.completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+        if not content:
+            raise ParsingError("LLM returned empty content while revising a skill.")
+        return self._parse_skill_response(content, name.replace("-", " "))
+
     def _build_system_prompt(self) -> str:
         return (
             "You are an expert at writing agent skills in SKILL.md format.\n"
@@ -149,7 +179,7 @@ class LLMClient:
     def _clean_description(self, text: str) -> str:
         """Clean up the description part of the response."""
         # Remove "Description:", "Part 1:", markdown headers, quotes, etc.
-        text = re.sub(r"^(?i)(description|part\s*1):", "", text).strip()
+        text = re.sub(r"^(description|part\s*1):", "", text, flags=re.IGNORECASE).strip()
         text = text.lstrip("#").strip()
         text = text.strip("\"' ")
         return text.split("\n")[0].strip()
@@ -176,3 +206,15 @@ def generate_skill_content(
     """Compatibility wrapper for the new LLMClient."""
     client = LLMClient(model=model)
     return client.generate_skill_content(name, description, source_context)
+
+
+def revise_skill_content(
+    name: str,
+    current_skill_md: str,
+    improvement_prompt: str,
+    *,
+    model: Optional[str] = None,
+) -> Tuple[str, str]:
+    """Compatibility wrapper for iterative skill improvement."""
+    client = LLMClient(model=model)
+    return client.revise_skill_content(name, current_skill_md, improvement_prompt)

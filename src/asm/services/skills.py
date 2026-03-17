@@ -19,6 +19,25 @@ from asm.repo import config, lockfile, snapshots
 from asm.templates import build_skill_md
 
 
+@dataclass
+class SkillCreationLoopSummary:
+    """Summary of an optional local build/evaluate/improve loop."""
+
+    attempts: int = 0
+    target_score: float = 0.0
+    final_score: float = 0.0
+    reached_target: bool = False
+    artifact_path: Path | None = None
+
+
+@dataclass
+class SkillCreateResult:
+    """Return object for skill creation workflows."""
+
+    path: Path
+    loop: SkillCreationLoopSummary | None = None
+
+
 def _skill_md_from_llm(name: str, description: str, body: str) -> str:
     """Build full SKILL.md from LLM-generated description and body."""
     return "\n".join([
@@ -30,6 +49,42 @@ def _skill_md_from_llm(name: str, description: str, body: str) -> str:
         body,
         "",
     ])
+
+
+def _build_skill_source_context(
+    source_path: str | None,
+    *,
+    source_url: str | None,
+    deepwiki_context: str | None,
+    emit: Callable[[str], None],
+) -> str | None:
+    """Collect optional source context for LLM-backed skill generation."""
+    parts: list[str] = []
+    if source_path:
+        src = Path(source_path).resolve()
+        if src.is_file():
+            parts.append(src.read_text()[:8000])
+        elif src.is_dir():
+            for file_path in sorted(src.rglob("*"))[:30]:
+                if file_path.is_file() and file_path.suffix in (".py", ".md", ".txt", ".toml"):
+                    try:
+                        parts.append(f"### {file_path.name}\n{file_path.read_text()[:1500]}")
+                    except Exception:
+                        continue
+    if source_url:
+        emit("Fetching content from URL…")
+        from asm.services import url_content
+
+        try:
+            url_text = url_content.fetch_url_content(source_url, max_chars=40_000)
+            parts.append(f"## Content from URL\n\n{url_text}")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to fetch --from-url: {exc}") from exc
+    if deepwiki_context:
+        parts.append(f"## DeepWiki Documentation\n\n{deepwiki_context}")
+    if not parts:
+        return None
+    return "\n\n".join(parts)[:50_000]
 
 
 def add_skill(
@@ -94,7 +149,11 @@ def create_skill(
     llm_model: str | None = None,
     source_url: str | None = None,
     deepwiki_context: str | None = None,
-) -> Path:
+    improvement_loop: bool = False,
+    target_score: float = 0.9,
+    max_tries: int = 5,
+    override: bool = False,
+) -> SkillCreateResult:
     """Scaffold a new SKILL.md package and register it.
 
     When use_llm is True, calls the LLM service (LiteLLM) to generate
@@ -105,58 +164,93 @@ def create_skill(
     as additional context for the LLM.
     """
     emit = on_progress or (lambda _msg: None)
+    if max_tries < 1:
+        raise ValueError("--max-tries must be >= 1")
+    if not 0.0 <= target_score <= 1.0:
+        raise ValueError("--target-score must be between 0.0 and 1.0")
+    if improvement_loop:
+        use_llm = True
 
     skill_dir = paths.skills_dir(root) / skill_name
     if skill_dir.exists():
-        raise FileExistsError(f"Skill already exists: {skill_dir}")
+        if not override:
+            raise FileExistsError(f"Skill already exists: {skill_dir}")
+        emit("Overriding existing skill directory…")
+        shutil.rmtree(skill_dir)
+        analysis_dir = paths.skill_analysis_dir(root, skill_name)
+        if analysis_dir.exists():
+            emit("Clearing previous analysis artifact…")
+            shutil.rmtree(analysis_dir)
 
     emit("Scaffolding skill directory…")
     skill_dir.mkdir(parents=True)
 
+    source_context = _build_skill_source_context(
+        source_path,
+        source_url=source_url,
+        deepwiki_context=deepwiki_context,
+        emit=emit,
+    )
+
+    if source_path:
+        emit("Ingesting source code…")
+        _ingest_source(Path(source_path).resolve(), skill_dir)
+
+    loop_summary: SkillCreationLoopSummary | None = None
     if use_llm:
+        from asm.services import llm, skill_analysis
+
         emit("Generating content with LLM…")
-        source_context = None
-        parts: list[str] = []
-        if source_path:
-            src = Path(source_path).resolve()
-            if src.is_file():
-                parts.append(src.read_text()[:8000])
-            elif src.is_dir():
-                for f in sorted(src.rglob("*"))[:30]:
-                    if f.is_file() and f.suffix in (".py", ".md", ".txt", ".toml"):
-                        try:
-                            parts.append(f"### {f.name}\n{f.read_text()[:1500]}")
-                        except Exception:
-                            pass
-        if source_url:
-            emit("Fetching content from URL…")
-            from asm.services import url_content
-
-            try:
-                url_text = url_content.fetch_url_content(source_url, max_chars=40_000)
-                parts.append(f"## Content from URL\n\n{url_text}")
-            except Exception as e:
-                raise RuntimeError(f"Failed to fetch --from-url: {e}") from e
-        if deepwiki_context:
-            parts.append(f"## DeepWiki Documentation\n\n{deepwiki_context}")
-        if parts:
-            source_context = "\n\n".join(parts)[:50_000]
-        from asm.services import llm
-
         desc, body = llm.generate_skill_content(
             skill_name, description, source_context, model=llm_model
         )
         skill_md = _skill_md_from_llm(skill_name, desc, body)
         (skill_dir / "SKILL.md").write_text(skill_md)
+
+        if improvement_loop:
+            loop_summary = SkillCreationLoopSummary(target_score=target_score)
+            for attempt in range(1, max_tries + 1):
+                response, artifact_path = skill_analysis.analyze_skill_local(
+                    root,
+                    skill_name,
+                    model=llm_model,
+                )
+                final_score = skill_analysis.scorecard_overall_score(response.scorecard)
+                loop_summary.attempts = attempt
+                loop_summary.final_score = final_score
+                loop_summary.artifact_path = artifact_path
+                emit(
+                    f"Loop {attempt}/{max_tries}: score {final_score:.2f} "
+                    f"(target {target_score:.2f})"
+                )
+                if final_score >= target_score:
+                    loop_summary.reached_target = True
+                    break
+                if attempt == max_tries:
+                    break
+
+                improvement_prompt = response.scorecard.improvement_prompt.strip()
+                if not improvement_prompt:
+                    emit("Analyzer returned no improvement prompt; stopping loop.")
+                    break
+                emit("Rewriting skill from analyzer feedback…")
+                try:
+                    revised_desc, revised_body = llm.revise_skill_content(
+                        skill_name,
+                        (skill_dir / "SKILL.md").read_text(),
+                        improvement_prompt,
+                        model=llm_model,
+                    )
+                except llm.LLMError as exc:
+                    emit(f"Rewrite step failed: {exc}; stopping loop with current draft.")
+                    break
+                skill_md = _skill_md_from_llm(skill_name, revised_desc, revised_body)
+                (skill_dir / "SKILL.md").write_text(skill_md)
     else:
         title = " ".join(w.capitalize() for w in skill_name.split("-"))
         (skill_dir / "SKILL.md").write_text(
             build_skill_md(skill_name, title, description, source_path)
         )
-
-    if source_path:
-        emit("Ingesting source code…")
-        _ingest_source(Path(source_path).resolve(), skill_dir)
 
     source_label = f"local:.asm/skills/{skill_name}"
 
@@ -166,7 +260,7 @@ def create_skill(
     emit("Locking integrity hash…")
     _register_lock(root, skill_name, source_label, skill_dir, {}, event_kind="create")
 
-    return skill_dir
+    return SkillCreateResult(path=skill_dir, loop=loop_summary)
 
 
 # ── Sync (like uv sync) ─────────────────────────────────────────────

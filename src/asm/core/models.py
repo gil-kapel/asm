@@ -26,6 +26,132 @@ class SkillMeta:
 
 
 @dataclass
+class SkillResourceGroup:
+    """Inventory for one resource directory inside a skill."""
+
+    count: int = 0
+    files: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SkillResourceInventory:
+    """Visible inventory for packaged skill resources."""
+
+    references: SkillResourceGroup = field(default_factory=SkillResourceGroup)
+    scripts: SkillResourceGroup = field(default_factory=SkillResourceGroup)
+    examples: SkillResourceGroup = field(default_factory=SkillResourceGroup)
+    assets: SkillResourceGroup = field(default_factory=SkillResourceGroup)
+
+
+@dataclass
+class EmbeddingProfile:
+    """Versioned embedding metadata for trustable analysis/routing."""
+
+    provider: str
+    model: str
+    dimension: int
+    normalized: bool
+    distance_metric: str
+    embedding_version: str
+    analysis_mode: str
+
+
+@dataclass
+class SkillManifest:
+    """Structured manifest used by local/cloud skill analysis."""
+
+    name: str
+    description: str
+    version: str = "0.0.0"
+    trigger_phrases: list[str] = field(default_factory=list)
+    resource_inventory: SkillResourceInventory = field(default_factory=SkillResourceInventory)
+    source_ref: str = ""
+    snapshot_id: str = ""
+    integrity: str = ""
+
+
+@dataclass
+class SkillEvidence:
+    """Evidence inventory attached to an analysis request."""
+
+    source_urls: list[str] = field(default_factory=list)
+    source_files: list[str] = field(default_factory=list)
+    deepwiki_ref: str = ""
+    evidence_digest: str = ""
+
+
+@dataclass
+class SkillFileRecord:
+    """One transmitted file from a skill package."""
+
+    path: str
+    kind: Literal["skill_md", "reference", "script", "example", "asset", "other"]
+    content: str
+
+
+@dataclass
+class SimilarSkillMatch:
+    """Nearest-neighbor skill returned by the analyzer."""
+
+    name: str
+    similarity: float
+
+
+AnalysisStatus = Literal["approved", "needs_work", "insufficient_evidence"]
+
+
+@dataclass
+class SkillScorecard:
+    """Structured scorecard returned by local/cloud analysis."""
+
+    skill_name: str
+    analysis_id: str
+    analysis_version: str
+    trigger_specificity: float
+    novelty: float
+    evidence_grounding: float
+    duplication_risk: float
+    status: AnalysisStatus
+    findings: list[str] = field(default_factory=list)
+    recommended_actions: list[str] = field(default_factory=list)
+    improvement_prompt: str = ""
+    similar_skills: list[SimilarSkillMatch] = field(default_factory=list)
+    created_at: str = ""
+
+
+@dataclass
+class SkillAnalysisArtifact:
+    """Local persisted artifact for the latest analysis result."""
+
+    manifest: SkillManifest
+    evidence: SkillEvidence
+    scorecard: SkillScorecard
+    embedding_profile: EmbeddingProfile
+    snapshot_id: str = ""
+    integrity: str = ""
+
+
+@dataclass
+class SkillAnalysisRequest:
+    """Payload sent from local ASM to the cloud analyzer."""
+
+    manifest: SkillManifest
+    evidence: SkillEvidence
+    embedding_profile: EmbeddingProfile
+    files: list[SkillFileRecord] = field(default_factory=list)
+
+
+@dataclass
+class SkillAnalysisResponse:
+    """Cloud analyzer response returned to local ASM."""
+
+    analysis_id: str
+    analysis_version: str
+    scorecard: SkillScorecard
+    embedding_profile: EmbeddingProfile
+
+
+@dataclass
 class SkillEntry:
     """A skill registered in asm.toml [skills.<name>]."""
     name: str

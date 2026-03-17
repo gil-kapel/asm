@@ -27,6 +27,10 @@ test = [
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.23",
 ]
+cloud = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",

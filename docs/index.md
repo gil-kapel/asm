@@ -11,34 +11,43 @@ title: ASM — Agent Skill Manager
 Copy this into your agent (Cursor, Claude Code, Codex, GitHub Copilot) to set up ASM end-to-end:
 
 ```text
-Set up ASM in this project end-to-end.
+Set up ASM in this project and leave it in a working state.
 
-ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs curated agent skills into `.asm/`, builds a root index (`.asm/main_asm.md`), and syncs those skills into the active agent config (Cursor / Claude / Codex / GitHub Copilot).
+ASM CLI (Agent Skill Manager) installs curated skills into `.asm/`, builds `.asm/main_asm.md`, configures expertises, and syncs the router into the active agent config.
 
-1) Install ASM:
-   curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh
+Do this in order:
 
-2) Initialize ASM in the current project root:
-   asm init
+1. Check whether `asm` is already installed. Install it only if missing:
+   `curl -LsSf https://raw.githubusercontent.com/gil-kapel/asm/main/install.sh | sh`
 
-3) (Optional) Configure SkillsMP/LLM access at user level:
-   - set `SKILLSMP_API_KEY` or `OPENAI_API_KEY` in ~/.asm-cli/.env for semantic discovery and AI skill creation.
+2. Check whether this repo already has ASM initialized.
+   - If `asm.toml` does not exist, run `asm init`.
+   - If it already exists, keep the current workspace and continue.
 
-4) Discover and install the most relevant curated skills:
-   - run `asm search <query>` to find verified skills (marked [curated])
-   - run `asm add skill <source>` for each selected skill
+3. Inspect the project briefly and choose a few relevant search queries.
+   - Prefer curated, project-specific skills.
+   - Avoid installing a long list of generic skills.
 
-5) Automate expertise configuration for your task:
-   - describe what you want to do in natural language
-   - run `asm expertise auto "<task description>"`
-   - ASM will autonomously match your task to expertise bundles, install missing skills, and sync your agent context.
+4. Install the best matching skills:
+   - `asm search "<query>"`
+   - `asm add skill <source>`
 
-6) Sync integrations:
-   asm sync
+5. Configure expertise routing for the actual task or project stack:
+   - `asm expertise auto "<task description>"`
 
-7) Output:
-   - list installed skills and active expertises
-   - confirm which agent(s) were synced (e.g. Cursor → .cursor/skills/asm, Claude Code → .claude/skills/asm, Codex → AGENTS.md, GitHub Copilot → .github/skills/asm)
+6. Sync integrations:
+   - `asm sync`
+
+7. If `ASM_CLOUD_API_URL` is configured and a local skill is available, run one cloud analysis:
+   - `asm skill analyze <skill-name> --cloud`
+
+8. At the end, report:
+   - whether ASM was installed or already present
+   - whether the workspace was initialized or already initialized
+   - which skills were installed
+   - which expertise was selected or created
+   - which agent config(s) were synced
+   - whether cloud analysis was run and where the scorecard was saved
 ```
 
 ## How it fits together
@@ -55,6 +64,7 @@ ASM CLI (Agent Skill Manager) is a project-local skill orchestrator: it installs
 | Goal | Where to go |
 |------|-------------|
 | Get up and running quickly | [Getting started](getting-started.md) |
+| Configure optional cloud skill analysis | [Cloud analyzer](cloud-analyzer.md) |
 | Configure expertises and route by task | [Expertises](expertises.md) |
 | See every command and option | [CLI reference](cli.md) |
 | Author or bundle skills | [Authoring skills](skills/authoring.md) |

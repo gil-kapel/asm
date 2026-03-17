@@ -14,11 +14,14 @@ import re
 from pathlib import Path
 
 import msgpack
+from asm.core.models import EmbeddingProfile
 
 _EMBED_DIM_HASH = 128
 _EMBED_DIM_API = 1536
 _CACHE_FILENAME = "embeddings.msgpack"
 _DEFAULT_MODEL = "text-embedding-3-small"
+_DISTANCE_METRIC = "cosine"
+_NORMALIZED = False
 
 
 def _cache_path() -> Path:
@@ -48,8 +51,19 @@ def _save_cache(cache: dict[str, list[float]]) -> None:
     path.write_bytes(packed)
 
 
-def _content_key(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def _content_key(text: str, profile: EmbeddingProfile) -> str:
+    payload = "|".join(
+        [
+            profile.provider,
+            profile.model,
+            str(profile.dimension),
+            str(profile.normalized).lower(),
+            profile.distance_metric,
+            profile.embedding_version,
+            text,
+        ]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _litellm_available() -> bool:
@@ -71,6 +85,38 @@ def _get_model() -> str:
     return os.environ.get("ASM_EMBED_MODEL", _DEFAULT_MODEL).strip()
 
 
+def current_profile(*, analysis_mode: str = "local") -> EmbeddingProfile:
+    """Return the active embedding profile for cache/version provenance."""
+    api_enabled = can_use_api()
+    provider = "litellm" if api_enabled else "hash-fallback"
+    model = _get_model() if api_enabled else "asm-hash-v1"
+    dimension = _EMBED_DIM_API if api_enabled else _EMBED_DIM_HASH
+    embedding_version = f"{provider}:{model}:{dimension}:{_DISTANCE_METRIC}:norm={str(_NORMALIZED).lower()}"
+    return EmbeddingProfile(
+        provider=provider,
+        model=model,
+        dimension=dimension,
+        normalized=_NORMALIZED,
+        distance_metric=_DISTANCE_METRIC,
+        embedding_version=embedding_version,
+        analysis_mode=analysis_mode,
+    )
+
+
+def profile_from_dict(raw: dict, *, analysis_mode: str = "local") -> EmbeddingProfile:
+    """Parse an embedding profile payload with safe defaults."""
+    fallback = current_profile(analysis_mode=analysis_mode)
+    return EmbeddingProfile(
+        provider=str(raw.get("provider", fallback.provider)),
+        model=str(raw.get("model", fallback.model)),
+        dimension=int(raw.get("dimension", fallback.dimension)),
+        normalized=bool(raw.get("normalized", fallback.normalized)),
+        distance_metric=str(raw.get("distance_metric", fallback.distance_metric)),
+        embedding_version=str(raw.get("embedding_version", fallback.embedding_version)),
+        analysis_mode=str(raw.get("analysis_mode", analysis_mode or fallback.analysis_mode)),
+    )
+
+
 def can_use_api() -> bool:
     """True when real API-based embeddings are available."""
     return _litellm_available() and _has_api_key()
@@ -82,7 +128,8 @@ def embed(text: str) -> list[float]:
         return _zero_vector()
 
     cache = _load_cache()
-    key = _content_key(text)
+    profile = current_profile()
+    key = _content_key(text, profile)
 
     if key in cache:
         return cache[key]
@@ -103,6 +150,7 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
         return []
 
     cache = _load_cache()
+    profile = current_profile()
     results: list[list[float] | None] = [None] * len(texts)
     uncached_indices: list[int] = []
     uncached_texts: list[str] = []
@@ -111,7 +159,7 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
         if not text.strip():
             results[i] = _zero_vector()
             continue
-        key = _content_key(text)
+        key = _content_key(text, profile)
         if key in cache:
             results[i] = cache[key]
         else:
@@ -126,7 +174,7 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
 
         for idx, vec in zip(uncached_indices, vectors):
             results[idx] = vec
-            cache[_content_key(texts[idx])] = vec
+            cache[_content_key(texts[idx], profile)] = vec
 
         _save_cache(cache)
 

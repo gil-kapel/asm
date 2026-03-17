@@ -13,6 +13,7 @@ EXPERTISES_DIR = "expertises"
 OBJECTS_DIR = "objects"
 HISTORY_DIR = "history"
 STASH_DIR = "stash"
+ANALYSIS_DIR = "analysis"
 
 
 def resolve_root(start: Path | None = None) -> Path:
@@ -54,3 +55,19 @@ def history_dir(root: Path) -> Path:
 
 def stash_dir(root: Path) -> Path:
     return asm_dir(root) / STASH_DIR
+
+
+def analysis_dir(root: Path) -> Path:
+    return asm_dir(root) / ANALYSIS_DIR
+
+
+def skill_analysis_dir(root: Path, skill_name: str) -> Path:
+    return analysis_dir(root) / skill_name
+
+
+def skill_analysis_latest_path(root: Path, skill_name: str) -> Path:
+    return skill_analysis_dir(root, skill_name) / "latest.json"
+
+
+def skill_analysis_manifest_path(root: Path, skill_name: str) -> Path:
+    return skill_analysis_dir(root, skill_name) / "manifest.json"

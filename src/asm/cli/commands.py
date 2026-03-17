@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import subprocess
+import textwrap
 from pathlib import Path
 
 import click
+from click.shell_completion import CompletionItem
 
 from asm.cli import cli
 from asm.cli.ui import spinner
@@ -14,6 +16,92 @@ from asm.services import integrations
 
 ASM_WHEEL_URL = "https://github.com/gil-kapel/asm/releases/latest/download/asm-py3-none-any.whl"
 ASM_GIT_REPO = "https://github.com/gil-kapel/asm"
+
+
+def _completion_root(ctx: click.Context) -> Path:
+    root_value = ctx.params.get("root")
+    if isinstance(root_value, str) and root_value.strip():
+        return Path(root_value)
+    return paths.resolve_root(Path.cwd())
+
+
+def _complete_installed_skills(
+    ctx: click.Context,
+    _param: click.Parameter,
+    incomplete: str,
+) -> list[CompletionItem]:
+    from asm.repo import config
+
+    cfg_path = _completion_root(ctx) / paths.ASM_TOML
+    if not cfg_path.exists():
+        return []
+    cfg = config.load(cfg_path)
+    selected = set(ctx.params.get("skills_list", ()))
+    return [
+        CompletionItem(name)
+        for name in sorted(cfg.skills)
+        if name not in selected and name.startswith(incomplete)
+    ]
+
+
+def _complete_expertises(
+    ctx: click.Context,
+    _param: click.Parameter,
+    incomplete: str,
+) -> list[CompletionItem]:
+    from asm.repo import config
+
+    cfg_path = _completion_root(ctx) / paths.ASM_TOML
+    if not cfg_path.exists():
+        return []
+    cfg = config.load(cfg_path)
+    return [
+        CompletionItem(name)
+        for name in sorted(cfg.expertises)
+        if name.startswith(incomplete)
+    ]
+
+
+def _complete_skill_refs(
+    ctx: click.Context,
+    _param: click.Parameter,
+    incomplete: str,
+) -> list[CompletionItem]:
+    from asm.repo import snapshots
+
+    skill_name = ctx.params.get("name")
+    if not isinstance(skill_name, str) or not skill_name:
+        return []
+    history = snapshots.load_history(_completion_root(ctx), skill_name)
+    refs = set(history.get("tags", {}).keys())
+    refs.update(
+        str(item.get("snapshot_id", ""))
+        for item in history.get("commits", [])
+        if item.get("snapshot_id")
+    )
+    return [
+        CompletionItem(ref)
+        for ref in sorted(refs)
+        if ref.startswith(incomplete)
+    ]
+
+
+def _complete_stash_ids(
+    ctx: click.Context,
+    _param: click.Parameter,
+    incomplete: str,
+) -> list[CompletionItem]:
+    skill_name = ctx.params.get("name")
+    if not isinstance(skill_name, str) or not skill_name:
+        return []
+    stash_dir = paths.stash_dir(_completion_root(ctx)) / skill_name
+    if not stash_dir.exists():
+        return []
+    return [
+        CompletionItem(path.stem)
+        for path in sorted(stash_dir.glob("*.json"))
+        if path.stem.startswith(incomplete)
+    ]
 
 
 # ── init ────────────────────────────────────────────────────────────
@@ -136,6 +224,47 @@ def create() -> None:
 @click.option("--from-url", "source_url", default=None, metavar="URL", help="URL content as context for --ai.")
 @click.option("--from-repo", "source_repo", default=None, metavar="OWNER/REPO", help="GitHub repo (DeepWiki) as context for --ai.")
 @click.option(
+    "--github-search",
+    "github_search_query",
+    default=None,
+    metavar="QUERY",
+    help="Search GitHub repos and enrich the skill with top matching repository context.",
+)
+@click.option(
+    "--github-search-limit",
+    default=3,
+    type=int,
+    show_default=True,
+    help="Maximum GitHub repos to enrich from when --github-search is enabled.",
+)
+@click.option(
+    "--override",
+    is_flag=True,
+    default=False,
+    help="Replace an existing local skill with the newly generated version.",
+)
+@click.option(
+    "--loop",
+    "improvement_loop",
+    is_flag=True,
+    default=False,
+    help="Iteratively build, locally analyze, and rewrite the skill until the target score or max tries.",
+)
+@click.option(
+    "--target-score",
+    default=0.9,
+    type=float,
+    show_default=True,
+    help="Stop the loop once the local analysis overall score reaches this 0-1 threshold.",
+)
+@click.option(
+    "--max-tries",
+    default=5,
+    type=int,
+    show_default=True,
+    help="Maximum build/analyze/rewrite attempts when --loop is enabled.",
+)
+@click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     show_default=True,
@@ -149,42 +278,75 @@ def create_skill(
     llm_model: str | None,
     source_url: str | None,
     source_repo: str | None,
+    github_search_query: str | None,
+    github_search_limit: int,
+    override: bool,
+    improvement_loop: bool,
+    target_score: float,
+    max_tries: int,
     root: str,
 ) -> None:
     """Create a skill (optionally from source, URL, or AI)."""
     from asm.services import bootstrap, skills
 
     root_path = _require_workspace(root)
+    llm_enabled = use_llm or improvement_loop
 
-    deepwiki_context: str | None = None
+    deepwiki_context_parts: list[str] = []
     if source_repo:
-        use_llm = True
+        llm_enabled = True
         from asm.services.deepwiki import fetch_repo_docs, parse_repo_ref
         try:
             owner, repo = parse_repo_ref(source_repo)
             click.echo(f"  Fetching DeepWiki docs for {owner}/{repo}…")
-            deepwiki_context = fetch_repo_docs(owner, repo)
-            if not deepwiki_context:
+            repo_context = fetch_repo_docs(owner, repo)
+            if repo_context:
+                deepwiki_context_parts.append(repo_context)
+            else:
                 click.echo("  ⚠ No DeepWiki content found, proceeding without it.")
         except (ValueError, RuntimeError) as exc:
             click.echo(f"  ⚠ DeepWiki fetch failed: {exc}")
+    searched_repos: list[str] = []
+    if github_search_query:
+        llm_enabled = True
+        from asm.services.deepwiki import fetch_search_context
+
+        try:
+            click.echo(f'  Searching GitHub for "{github_search_query}"…')
+            search_context, matches = fetch_search_context(
+                github_search_query,
+                limit=github_search_limit,
+            )
+            if search_context:
+                deepwiki_context_parts.append(search_context)
+                searched_repos = [match.full_name for match in matches]
+            else:
+                click.echo("  ⚠ No GitHub repo context found, proceeding without it.")
+        except (ValueError, RuntimeError) as exc:
+            click.echo(f"  ⚠ GitHub search enrichment failed: {exc}")
+    deepwiki_context = "\n\n".join(part for part in deepwiki_context_parts if part) or None
 
     try:
         with spinner() as status:
-            skill_dir = skills.create_skill(
+            create_result = skills.create_skill(
                 root_path,
                 name_arg,
                 description,
                 source_path,
                 on_progress=status,
-                use_llm=use_llm,
+                use_llm=llm_enabled,
                 llm_model=llm_model,
                 source_url=source_url,
                 deepwiki_context=deepwiki_context,
+                improvement_loop=improvement_loop,
+                target_score=target_score,
+                max_tries=max_tries,
+                override=override,
             )
     except (FileExistsError, ValueError, RuntimeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    skill_dir = create_result.path if hasattr(create_result, "path") else create_result
     bootstrap.regenerate(root_path)
     _auto_sync(root_path)
     click.echo(f"✔ Created skill: {name_arg}")
@@ -195,13 +357,36 @@ def create_skill(
         click.echo(f"  Context from URL: {source_url[:60]}…" if len(source_url) > 60 else f"  Context from URL: {source_url}")
     if source_repo:
         click.echo(f"  Context from DeepWiki: {source_repo}")
-    if use_llm:
+    if github_search_query:
+        click.echo(f"  GitHub search query: {github_search_query}")
+        if searched_repos:
+            click.echo(f"  Enriched from repos: {', '.join(searched_repos)}")
+    if llm_enabled:
         click.echo("  Content generated with LLM (LiteLLM)")
+    loop_summary = getattr(create_result, "loop", None)
+    if loop_summary:
+        click.echo(
+            f"  Loop score: {loop_summary.final_score:.2f} "
+            f"(target {loop_summary.target_score:.2f}, tries {loop_summary.attempts}/{max_tries})"
+        )
+        click.echo(
+            "  Loop status: reached target"
+            if loop_summary.reached_target
+            else "  Loop status: stopped before target"
+        )
+        if loop_summary.artifact_path:
+            click.echo(f"  Latest analysis artifact: {loop_summary.artifact_path}")
 
 
 @create.command("expertise")
 @click.argument("name_arg", metavar="NAME")
-@click.argument("skills_list", nargs=-1, required=True, metavar="SKILL...")
+@click.argument(
+    "skills_list",
+    nargs=-1,
+    required=True,
+    metavar="SKILL...",
+    shell_complete=_complete_installed_skills,
+)
 @click.option("--description", "--desc", "description", required=True, help="Expertise description.")
 @click.option(
     "--path", "root", default=".",
@@ -257,7 +442,7 @@ def expertise_list(root: str) -> None:
 
 
 @expertise_group.command("skills")
-@click.argument("expertise_name", metavar="EXPERTISE")
+@click.argument("expertise_name", metavar="EXPERTISE", shell_complete=_complete_expertises)
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
@@ -514,8 +699,110 @@ def skill_list(root: str) -> None:
         click.echo(f"- {name}")
 
 
+@skill_group.command("analyze")
+@click.argument("name", shell_complete=_complete_installed_skills)
+@click.option(
+    "--local",
+    "use_local",
+    is_flag=True,
+    default=False,
+    help="Run local LLM-backed analysis using `ASM_LLM_MODEL` and a provider API key.",
+)
+@click.option(
+    "--cloud",
+    "use_cloud",
+    is_flag=True,
+    default=False,
+    help="Run managed cloud analysis. Requires `ASM_CLOUD_API_URL` unless `--api-url` is passed.",
+)
+@click.option(
+    "--api-url",
+    default=None,
+    help="Override the ASM cloud analyzer base URL for this run.",
+)
+@click.option(
+    "--model",
+    "llm_model",
+    default=None,
+    envvar="ASM_LLM_MODEL",
+    help="LiteLLM model for `--local` analysis. Defaults to `ASM_LLM_MODEL`.",
+)
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root.",
+)
+def skill_analyze(
+    name: str,
+    use_local: bool,
+    use_cloud: bool,
+    api_url: str | None,
+    llm_model: str | None,
+    root: str,
+) -> None:
+    """Analyze and evaluate a skill locally or in the ASM cloud."""
+    from asm.services import skill_analysis
+
+    root_path = _require_workspace(root)
+    if use_local and use_cloud:
+        raise click.ClickException("Choose only one mode: `--local` or `--cloud`.")
+    if not use_local and not use_cloud:
+        raise click.ClickException(
+            "Choose an analysis mode: `--local` or `--cloud`."
+        )
+
+    try:
+        with spinner() as status:
+            if use_local:
+                status(f"Analyzing {name} with local LLM…")
+                response, artifact_path = skill_analysis.analyze_skill_local(
+                    root_path,
+                    name,
+                    model=llm_model,
+                )
+            else:
+                status(f"Analyzing {name} in ASM cloud…")
+                response, artifact_path = skill_analysis.analyze_skill_cloud(
+                    root_path,
+                    name,
+                    api_url=api_url,
+                )
+    except (
+        FileNotFoundError,
+        ValueError,
+        skill_analysis.LocalAnalysisError,
+        skill_analysis.CloudAnalysisError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    scorecard = response.scorecard
+    click.echo(f"✔ Analyzed {name}")
+    click.echo(f"  mode: {response.embedding_profile.analysis_mode}")
+    click.echo(f"  status: {scorecard.status}")
+    click.echo(
+        "  scores: "
+        f"trigger={scorecard.trigger_specificity:.2f} "
+        f"novelty={scorecard.novelty:.2f} "
+        f"grounding={scorecard.evidence_grounding:.2f} "
+        f"duplication={scorecard.duplication_risk:.2f}"
+    )
+    click.echo(f"  analysis_id: {response.analysis_id}")
+    click.echo(f"  analysis_version: {response.analysis_version}")
+    if use_local:
+        model_label = llm_model
+        if not model_label and ":" in response.analysis_version:
+            model_label = response.analysis_version.split(":", 1)[1]
+        if model_label:
+            click.echo(f"  model: {model_label}")
+    if scorecard.improvement_prompt:
+        click.echo("  improvement_prompt:")
+        click.echo(textwrap.indent(scorecard.improvement_prompt, "    "))
+    click.echo(f"  artifact: {artifact_path}")
+
+
 @skill_group.command("commit")
-@click.argument("name")
+@click.argument("name", shell_complete=_complete_installed_skills)
 @click.option("-m", "--message", required=True, help="Commit message.")
 @click.option(
     "--path", "root", default=".",
@@ -542,7 +829,7 @@ def skill_stash_group() -> None:
 
 
 @skill_stash_group.command("push")
-@click.argument("name")
+@click.argument("name", shell_complete=_complete_installed_skills)
 @click.option("-m", "--message", default="", help="Stash note.")
 @click.option(
     "--path", "root", default=".",
@@ -563,8 +850,8 @@ def skill_stash_push(name: str, message: str, root: str) -> None:
 
 
 @skill_stash_group.command("apply")
-@click.argument("name")
-@click.argument("stash_id", required=False)
+@click.argument("name", shell_complete=_complete_installed_skills)
+@click.argument("stash_id", required=False, shell_complete=_complete_stash_ids)
 @click.option("--pop", is_flag=True, help="Drop stash after apply.")
 @click.option(
     "--path", "root", default=".",
@@ -586,9 +873,9 @@ def skill_stash_apply(name: str, stash_id: str | None, pop: bool, root: str) -> 
 
 
 @skill_group.command("tag")
-@click.argument("name")
+@click.argument("name", shell_complete=_complete_installed_skills)
 @click.argument("tag")
-@click.argument("ref", required=False, default="HEAD")
+@click.argument("ref", required=False, default="HEAD", shell_complete=_complete_skill_refs)
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
@@ -608,8 +895,8 @@ def skill_tag(name: str, tag: str, ref: str, root: str) -> None:
 
 
 @skill_group.command("checkout")
-@click.argument("name")
-@click.argument("ref")
+@click.argument("name", shell_complete=_complete_installed_skills)
+@click.argument("ref", shell_complete=_complete_skill_refs)
 @click.option("--force", is_flag=True, help="Discard local changes.")
 @click.option(
     "--path", "root", default=".",
@@ -631,7 +918,7 @@ def skill_checkout(name: str, ref: str, force: bool, root: str) -> None:
 
 
 @skill_group.command("history")
-@click.argument("name")
+@click.argument("name", shell_complete=_complete_installed_skills)
 @click.option("--limit", default=20, type=int, show_default=True, help="Max entries.")
 @click.option(
     "--path", "root", default=".",
@@ -657,7 +944,7 @@ def skill_history(name: str, limit: int, root: str) -> None:
 
 
 @skill_group.command("status")
-@click.argument("name")
+@click.argument("name", shell_complete=_complete_installed_skills)
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
@@ -689,7 +976,7 @@ def skill_status(name: str, root: str) -> None:
 
 
 @skill_group.command("diff")
-@click.argument("name")
+@click.argument("name", shell_complete=_complete_installed_skills)
 @click.argument("rel_path", required=False)
 @click.option(
     "--path", "root", default=".",

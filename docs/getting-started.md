@@ -66,9 +66,29 @@ So agents know which skills to use for your task, match it to an expertise: run 
 
 After adding or changing skills or expertises, run `asm sync`. ASM regenerates `.asm/main_asm.md` from your **expertises** (and skills) and updates your IDE agent configs (Cursor / Claude / Codex / GitHub Copilot). See the [CLI reference](cli.md) and the README’s **Agent Integration** section for details.
 
+## 6. Optional: turn on cloud skill analysis
+
+Set the cloud analyzer URL in a user-level ASM env file:
+
+```bash
+mkdir -p ~/.asm-cli
+cat >> ~/.asm-cli/.env <<'EOF'
+ASM_CLOUD_API_URL=http://127.0.0.1:8000
+EOF
+```
+
+Then analyze one local skill:
+
+```bash
+asm skill analyze my-skill --cloud
+```
+
+ASM stores the latest scorecard under `.asm/analysis/my-skill/`.
+
 ## Next steps
 
 - [Expertises](expertises.md) — why expertises and how routing works
 - [CLI reference](cli.md) — full command list and options
+- [Cloud analyzer](cloud-analyzer.md) — config, local backend run, and artifact storage
 - [Authoring skills](skills/authoring.md) — create and bundle skills
 - [README on GitHub](https://github.com/gil-kapel/asm) — copy-paste prompt and full docs

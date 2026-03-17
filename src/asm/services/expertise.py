@@ -30,7 +30,6 @@ _ADVANCED_SKILL_CLASSIFICATION: dict[str, str] = {
     "skill-development": "Advanced skill-system design and reusable blueprint authoring.",
     "python-packaging": "Advanced packaging and release workflows for reusable Python tooling.",
     "python-testing": "Advanced testing strategy and reliability patterns beyond basic assertions.",
-    "zendriver": "Advanced browser automation and non-trivial interaction orchestration.",
 }
 
 
