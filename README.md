@@ -493,7 +493,7 @@ asm create skill sqlmodel-database "Async SQLModel patterns" --github-search "sq
 ```
 
 - **`--ai`**: Use LiteLLM to generate the skill description and body.
-- **`--loop`**: Turn on a local build -> analyze -> rewrite loop. ASM uses the local scorecard's `improvement_prompt` until the target score is reached or max tries is hit.
+- **`--loop`**: Turn on a build -> analyze -> rewrite loop. ASM uses the local scorecard's `improvement_prompt`, and when `evidence_grounding` or `trigger_specificity` is low it automatically fetches DeepWiki/GitHub evidence and materializes it into `references/research-iteration-<n>.md` before rewriting.
 - **`--model`**: LiteLLM model string (default: `openai/gpt-4o-mini`). Can be set with `ASM_LLM_MODEL`.
 - **`--target-score`**: Loop stop threshold from `0.0` to `1.0` for the aggregate local analysis score.
 - **`--max-tries`**: Maximum number of build/analyze/rewrite passes when `--loop` is enabled.
@@ -502,6 +502,22 @@ asm create skill sqlmodel-database "Async SQLModel patterns" --github-search "sq
 - **`--github-search QUERY`**: Search GitHub repos, fetch the top repo docs and key files, and use that bundle as extra LLM context.
 
 LiteLLM supports 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, etc.) with a single interface; set the corresponding API key and use the `provider/model-name` format for `--model`.
+
+### Share your skill
+
+ASM treats custom skill creation as a core workflow: build locally, analyze it, improve it, then package it for sharing.
+
+```bash
+asm skill analyze langgraph-skill-builder --local
+asm skill share langgraph-skill-builder
+```
+
+`asm skill share` creates:
+
+- `dist/skills/<name>/` with the full skill package
+- `dist/skills/<name>.zip` for easy publishing
+- `share.json` with integrity and snapshot metadata
+- publish the folder or zip to GitHub, a registry, or any public repo
 
 ### Create a skill from existing code
 

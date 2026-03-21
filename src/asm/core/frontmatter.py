@@ -26,10 +26,29 @@ def extract_meta(skill_dir: Path) -> SkillMeta:
     fm = match.group(1)
     name_m = re.search(r"^name:\s*(.+)$", fm, re.MULTILINE)
     desc_m = re.search(r"^description:\s*(.+)$", fm, re.MULTILINE)
+    triggers_m = re.search(r"^trigger_phrases:\s*\[(?P<items>[^\]]*)\]\s*$", fm, re.MULTILINE)
+    triggers_block_m = re.search(
+        r"^trigger_phrases:\s*$\n(?P<block>(?:^\s*-\s*.+$\n?)+)",
+        fm,
+        re.MULTILINE,
+    )
     ver_m = re.search(r"^version:\s*(.+)$", fm, re.MULTILINE)
 
     name = name_m.group(1).strip() if name_m else ""
     description = desc_m.group(1).strip() if desc_m else ""
+    triggers: list[str] = []
+    if triggers_m:
+        raw_items = triggers_m.group("items")
+        for item in raw_items.split(","):
+            cleaned = item.strip().strip("\"' ")
+            if cleaned:
+                triggers.append(cleaned)
+    elif triggers_block_m:
+        block = triggers_block_m.group("block")
+        for line in re.findall(r"^\s*-\s*(.+)$", block, flags=re.MULTILINE):
+            cleaned = line.strip().strip("\"' ")
+            if cleaned:
+                triggers.append(cleaned)
     version = ver_m.group(1).strip() if ver_m else "0.0.0"
 
     if not description:
@@ -41,7 +60,7 @@ def extract_meta(skill_dir: Path) -> SkillMeta:
                 line.strip() for line in block.group(1).splitlines() if line.strip()
             )
 
-    return SkillMeta(name=name, description=description, version=version)
+    return SkillMeta(name=name, description=description, trigger_phrases=triggers, version=version)
 
 
 def validate(skill_dir: Path) -> tuple[bool, str]:

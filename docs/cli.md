@@ -23,6 +23,7 @@ ASM exposes a single entrypoint, `asm`, with subcommands grouped by workflow. Fo
 | `asm skill analyze <name> --cloud` | Submit one local skill to the ASM cloud analyzer and store the latest scorecard under `.asm/analysis/`. |
 | `asm skill analyze <name> --local` | Analyze one local skill with LiteLLM using `ASM_LLM_MODEL` and a provider API key. |
 | `asm create skill <name> <desc>` | Scaffold a new skill package, optionally with `--ai`, `--github-search`, or iterative `--loop` refinement. |
+| `asm skill share <name>` | Package one local skill into `dist/skills/` as a folder plus zip archive for publishing or reuse. |
 | `asm skill commit <name> -m <msg>` | Commit local changes of a skill. |
 | `asm skill stash push` / `apply` | Save or restore WIP snapshots. |
 | `asm skill tag` / `checkout` / `history` / `status` / `diff` | Manage and inspect skill versions. |
@@ -49,6 +50,7 @@ When enabled, ASM:
 
 - generates the initial `SKILL.md`
 - runs local analysis to get a scorecard
+- if the scorecard indicates weak trigger routing or evidence grounding, automatically fetches DeepWiki/GitHub evidence and materializes it into `references/research-iteration-<n>.md`
 - feeds the scorecard `improvement_prompt` back into the writer
 - stops once the aggregate 0-1 score reaches `--target-score` or `--max-tries` is reached
 
@@ -67,6 +69,22 @@ This path:
 - selects the top matches
 - reuses the DeepWiki repo fetcher to collect README, structure, docs, and key source files
 - sends the combined bundle into the LLM skill writer
+
+## Share a skill
+
+ASM includes a core packaging path for user-authored skills so they can be shared outside the current workspace.
+
+```bash
+asm skill share langgraph-skill-builder
+asm skill share langgraph-skill-builder --overwrite
+asm skill share langgraph-skill-builder --out ./dist/public-skills --overwrite
+```
+
+This command creates:
+
+- a share folder under `dist/skills/<name>/`
+- a zip archive at `dist/skills/<name>.zip`
+- a `share.json` manifest with description, version, integrity, snapshot, and file inventory
 
 ### Command
 

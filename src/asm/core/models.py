@@ -22,6 +22,7 @@ class SkillMeta:
     """Metadata extracted from SKILL.md YAML frontmatter."""
     name: str
     description: str
+    trigger_phrases: list[str] = field(default_factory=list)
     version: str = "0.0.0"
 
 

@@ -238,6 +238,12 @@ def create() -> None:
     help="Maximum GitHub repos to enrich from when --github-search is enabled.",
 )
 @click.option(
+    "--improve",
+    is_flag=True,
+    default=False,
+    help="Improve an existing local skill in place instead of recreating it.",
+)
+@click.option(
     "--override",
     is_flag=True,
     default=False,
@@ -270,6 +276,12 @@ def create() -> None:
     show_default=True,
     help="Project root.",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Print step-by-step create/loop progress instead of the inline spinner.",
+)
 def create_skill(
     name_arg: str,
     description: str,
@@ -280,17 +292,19 @@ def create_skill(
     source_repo: str | None,
     github_search_query: str | None,
     github_search_limit: int,
+    improve: bool,
     override: bool,
     improvement_loop: bool,
     target_score: float,
     max_tries: int,
     root: str,
+    verbose: bool,
 ) -> None:
-    """Create a skill (optionally from source, URL, or AI)."""
+    """Create or improve a skill (optionally from source, URL, or AI)."""
     from asm.services import bootstrap, skills
 
     root_path = _require_workspace(root)
-    llm_enabled = use_llm or improvement_loop
+    llm_enabled = use_llm or improvement_loop or improve
 
     deepwiki_context_parts: list[str] = []
     if source_repo:
@@ -326,14 +340,17 @@ def create_skill(
             click.echo(f"  ⚠ GitHub search enrichment failed: {exc}")
     deepwiki_context = "\n\n".join(part for part in deepwiki_context_parts if part) or None
 
+    def _verbose_progress(msg: str) -> None:
+        click.echo(f"  {msg}")
+
     try:
-        with spinner() as status:
+        if verbose:
             create_result = skills.create_skill(
                 root_path,
                 name_arg,
                 description,
                 source_path,
-                on_progress=status,
+                on_progress=_verbose_progress,
                 use_llm=llm_enabled,
                 llm_model=llm_model,
                 source_url=source_url,
@@ -341,15 +358,35 @@ def create_skill(
                 improvement_loop=improvement_loop,
                 target_score=target_score,
                 max_tries=max_tries,
+                improve=improve,
                 override=override,
             )
-    except (FileExistsError, ValueError, RuntimeError) as exc:
+        else:
+            with spinner() as status:
+                create_result = skills.create_skill(
+                    root_path,
+                    name_arg,
+                    description,
+                    source_path,
+                    on_progress=status,
+                    use_llm=llm_enabled,
+                    llm_model=llm_model,
+                    source_url=source_url,
+                    deepwiki_context=deepwiki_context,
+                    improvement_loop=improvement_loop,
+                    target_score=target_score,
+                    max_tries=max_tries,
+                    improve=improve,
+                    override=override,
+                )
+    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     skill_dir = create_result.path if hasattr(create_result, "path") else create_result
     bootstrap.regenerate(root_path)
     _auto_sync(root_path)
-    click.echo(f"✔ Created skill: {name_arg}")
+    action_label = "Improved" if getattr(create_result, "action", "created") == "improved" else "Created"
+    click.echo(f"✔ {action_label} skill: {name_arg}")
     click.echo(f"  → {skill_dir}/SKILL.md")
     if source_path:
         click.echo(f"  Source distilled from: {source_path}")
@@ -365,15 +402,23 @@ def create_skill(
         click.echo("  Content generated with LLM (LiteLLM)")
     loop_summary = getattr(create_result, "loop", None)
     if loop_summary:
-        click.echo(
-            f"  Loop score: {loop_summary.final_score:.2f} "
-            f"(target {loop_summary.target_score:.2f}, tries {loop_summary.attempts}/{max_tries})"
-        )
+        if loop_summary.artifact_path:
+            click.echo(
+                f"  Loop score: {loop_summary.final_score:.2f} "
+                f"(target {loop_summary.target_score:.2f}, tries {loop_summary.attempts}/{max_tries})"
+            )
+        else:
+            click.echo(
+                f"  Loop score: unavailable "
+                f"(target {loop_summary.target_score:.2f}, tries {loop_summary.attempts}/{max_tries})"
+            )
         click.echo(
             "  Loop status: reached target"
             if loop_summary.reached_target
             else "  Loop status: stopped before target"
         )
+        if getattr(loop_summary, "stop_reason", ""):
+            click.echo(f"  Loop stop reason: {loop_summary.stop_reason}")
         if loop_summary.artifact_path:
             click.echo(f"  Latest analysis artifact: {loop_summary.artifact_path}")
 
@@ -706,7 +751,7 @@ def skill_list(root: str) -> None:
     "use_local",
     is_flag=True,
     default=False,
-    help="Run local LLM-backed analysis using `ASM_LLM_MODEL` and a provider API key.",
+    help="Run local OpenAI-backed analysis using `ASM_LLM_MODEL`/`OPENAI_API_KEY`.",
 )
 @click.option(
     "--cloud",
@@ -725,7 +770,7 @@ def skill_list(root: str) -> None:
     "llm_model",
     default=None,
     envvar="ASM_LLM_MODEL",
-    help="LiteLLM model for `--local` analysis. Defaults to `ASM_LLM_MODEL`.",
+    help="OpenAI model for `--local` analysis. Defaults to `ASM_LLM_MODEL`.",
 )
 @click.option(
     "--path", "root", default=".",
@@ -799,6 +844,48 @@ def skill_analyze(
         click.echo("  improvement_prompt:")
         click.echo(textwrap.indent(scorecard.improvement_prompt, "    "))
     click.echo(f"  artifact: {artifact_path}")
+
+
+@skill_group.command("share")
+@click.argument("name", shell_complete=_complete_installed_skills)
+@click.option(
+    "--out",
+    "out_dir",
+    default=None,
+    type=click.Path(file_okay=False, resolve_path=True),
+    help="Output directory for share artifacts. Defaults to `dist/skills/` under the workspace root.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    help="Replace an existing share folder/archive for this skill.",
+)
+@click.option(
+    "--path", "root", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    show_default=True,
+    help="Project root.",
+)
+def skill_share(name: str, out_dir: str | None, overwrite: bool, root: str) -> None:
+    """Package one local skill for sharing."""
+    from asm.services import skills
+
+    root_path = _require_workspace(root)
+    try:
+        share_dir, archive_path = skills.skill_share(
+            root_path,
+            name,
+            out_dir=Path(out_dir) if out_dir else None,
+            overwrite=overwrite,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"✔ Shared skill: {name}")
+    click.echo(f"  folder: {share_dir}")
+    click.echo(f"  archive: {archive_path}")
+    click.echo("  next: publish the folder or zip to GitHub, a registry, or any public repo.")
 
 
 @skill_group.command("commit")

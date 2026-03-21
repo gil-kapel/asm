@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import getpass
 import re
 import shutil
@@ -9,6 +10,7 @@ import tempfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from asm.core import paths
@@ -28,6 +30,7 @@ class SkillCreationLoopSummary:
     final_score: float = 0.0
     reached_target: bool = False
     artifact_path: Path | None = None
+    stop_reason: str = ""
 
 
 @dataclass
@@ -36,6 +39,15 @@ class SkillCreateResult:
 
     path: Path
     loop: SkillCreationLoopSummary | None = None
+    action: str = "created"
+
+
+@dataclass
+class SkillSourceContext:
+    """Collected research context and existing support files for skill writing."""
+
+    prompt_context: str | None = None
+    supporting_files: list[str] = field(default_factory=list)
 
 
 def _skill_md_from_llm(name: str, description: str, body: str) -> str:
@@ -52,14 +64,16 @@ def _skill_md_from_llm(name: str, description: str, body: str) -> str:
 
 
 def _build_skill_source_context(
+    skill_dir: Path,
     source_path: str | None,
     *,
     source_url: str | None,
     deepwiki_context: str | None,
     emit: Callable[[str], None],
-) -> str | None:
+) -> SkillSourceContext:
     """Collect optional source context for LLM-backed skill generation."""
     parts: list[str] = []
+    supporting_files: list[str] = []
     if source_path:
         src = Path(source_path).resolve()
         if src.is_file():
@@ -78,13 +92,55 @@ def _build_skill_source_context(
         try:
             url_text = url_content.fetch_url_content(source_url, max_chars=40_000)
             parts.append(f"## Content from URL\n\n{url_text}")
+            supporting_files.append(
+                _write_generated_reference(
+                    skill_dir,
+                    "url-context.md",
+                    f"# Source URL Context\n\nSource: {source_url}\n\n{url_text}\n",
+                )
+            )
         except Exception as exc:
             raise RuntimeError(f"Failed to fetch --from-url: {exc}") from exc
     if deepwiki_context:
         parts.append(f"## DeepWiki Documentation\n\n{deepwiki_context}")
+        supporting_files.append(
+            _write_generated_reference(
+                skill_dir,
+                "research-context.md",
+                f"# GitHub Research Context\n\n{deepwiki_context}\n",
+            )
+        )
     if not parts:
-        return None
-    return "\n\n".join(parts)[:50_000]
+        return SkillSourceContext(
+            prompt_context=None,
+            supporting_files=_supporting_skill_files(skill_dir),
+        )
+    return SkillSourceContext(
+        prompt_context="\n\n".join(parts)[:50_000],
+        supporting_files=_supporting_skill_files(skill_dir, seed_files=supporting_files),
+    )
+
+
+def _write_generated_reference(skill_dir: Path, filename: str, content: str) -> str:
+    """Persist generated research context as a real file in the skill package."""
+    references_dir = skill_dir / "references"
+    references_dir.mkdir(parents=True, exist_ok=True)
+    target = references_dir / filename
+    target.write_text(content[:50_000], encoding="utf-8")
+    return target.relative_to(skill_dir).as_posix()
+
+
+def _supporting_skill_files(skill_dir: Path, *, seed_files: list[str] | None = None) -> list[str]:
+    """List the real support files available for SKILL.md to reference."""
+    files = set(seed_files or [])
+    for folder_name in ("references", "examples", "scripts", "assets"):
+        folder = skill_dir / folder_name
+        if not folder.exists():
+            continue
+        for file_path in sorted(folder.rglob("*")):
+            if file_path.is_file():
+                files.add(file_path.relative_to(skill_dir).as_posix())
+    return sorted(files)
 
 
 def add_skill(
@@ -153,6 +209,7 @@ def create_skill(
     target_score: float = 0.9,
     max_tries: int = 5,
     override: bool = False,
+    improve: bool = False,
 ) -> SkillCreateResult:
     """Scaffold a new SKILL.md package and register it.
 
@@ -168,9 +225,59 @@ def create_skill(
         raise ValueError("--max-tries must be >= 1")
     if not 0.0 <= target_score <= 1.0:
         raise ValueError("--target-score must be between 0.0 and 1.0")
-    if improvement_loop:
+    if improve and override:
+        raise ValueError("--improve and --override cannot be used together")
+    if improvement_loop or improve:
         use_llm = True
 
+    if improve:
+        return _improve_skill(
+            root,
+            skill_name,
+            description,
+            source_path,
+            emit=emit,
+            llm_model=llm_model,
+            source_url=source_url,
+            deepwiki_context=deepwiki_context,
+            improvement_loop=improvement_loop,
+            target_score=target_score,
+            max_tries=max_tries,
+        )
+
+    return _create_new_skill(
+        root,
+        skill_name,
+        description,
+        source_path,
+        emit=emit,
+        use_llm=use_llm,
+        llm_model=llm_model,
+        source_url=source_url,
+        deepwiki_context=deepwiki_context,
+        improvement_loop=improvement_loop,
+        target_score=target_score,
+        max_tries=max_tries,
+        override=override,
+    )
+
+
+def _create_new_skill(
+    root: Path,
+    skill_name: str,
+    description: str,
+    source_path: str | None,
+    *,
+    emit: Callable[[str], None],
+    use_llm: bool,
+    llm_model: str | None,
+    source_url: str | None,
+    deepwiki_context: str | None,
+    improvement_loop: bool,
+    target_score: float,
+    max_tries: int,
+    override: bool,
+) -> SkillCreateResult:
     skill_dir = paths.skills_dir(root) / skill_name
     if skill_dir.exists():
         if not override:
@@ -186,6 +293,7 @@ def create_skill(
     skill_dir.mkdir(parents=True)
 
     source_context = _build_skill_source_context(
+        skill_dir,
         source_path,
         source_url=source_url,
         deepwiki_context=deepwiki_context,
@@ -195,6 +303,7 @@ def create_skill(
     if source_path:
         emit("Ingesting source code…")
         _ingest_source(Path(source_path).resolve(), skill_dir)
+        source_context.supporting_files = _supporting_skill_files(skill_dir, seed_files=source_context.supporting_files)
 
     loop_summary: SkillCreationLoopSummary | None = None
     if use_llm:
@@ -202,65 +311,420 @@ def create_skill(
 
         emit("Generating content with LLM…")
         desc, body = llm.generate_skill_content(
-            skill_name, description, source_context, model=llm_model
+            skill_name,
+            description,
+            source_context.prompt_context,
+            model=llm_model,
+            supporting_files=source_context.supporting_files,
         )
         skill_md = _skill_md_from_llm(skill_name, desc, body)
         (skill_dir / "SKILL.md").write_text(skill_md)
 
-        if improvement_loop:
-            loop_summary = SkillCreationLoopSummary(target_score=target_score)
-            for attempt in range(1, max_tries + 1):
-                response, artifact_path = skill_analysis.analyze_skill_local(
-                    root,
-                    skill_name,
-                    model=llm_model,
-                )
-                final_score = skill_analysis.scorecard_overall_score(response.scorecard)
-                loop_summary.attempts = attempt
-                loop_summary.final_score = final_score
-                loop_summary.artifact_path = artifact_path
-                emit(
-                    f"Loop {attempt}/{max_tries}: score {final_score:.2f} "
-                    f"(target {target_score:.2f})"
-                )
-                if final_score >= target_score:
-                    loop_summary.reached_target = True
-                    break
-                if attempt == max_tries:
-                    break
+        # Materialize any missing support files referenced by the freshly
+        # generated SKILL.md. This prevents the "SKILL.md mentions files, but
+        # files don't exist" failure mode when the loop stops before the
+        # rewrite/materialize stage.
+        _materialize_missing_support_files_from_skill_md(
+            skill_dir,
+            emit=emit,
+            skill_name=skill_name,
+            model=llm_model,
+        )
 
-                improvement_prompt = response.scorecard.improvement_prompt.strip()
-                if not improvement_prompt:
-                    emit("Analyzer returned no improvement prompt; stopping loop.")
-                    break
-                emit("Rewriting skill from analyzer feedback…")
-                try:
-                    revised_desc, revised_body = llm.revise_skill_content(
-                        skill_name,
-                        (skill_dir / "SKILL.md").read_text(),
-                        improvement_prompt,
-                        model=llm_model,
-                    )
-                except llm.LLMError as exc:
-                    emit(f"Rewrite step failed: {exc}; stopping loop with current draft.")
-                    break
-                skill_md = _skill_md_from_llm(skill_name, revised_desc, revised_body)
-                (skill_dir / "SKILL.md").write_text(skill_md)
+        if improvement_loop:
+            graph_result = skill_analysis.run_local_improvement_graph(
+                root,
+                skill_name,
+                model=llm_model,
+                target_score=target_score,
+                max_tries=max_tries,
+                on_progress=emit,
+            )
+            loop_summary = SkillCreationLoopSummary(
+                attempts=graph_result.attempts,
+                target_score=graph_result.target_score,
+                final_score=graph_result.final_score,
+                reached_target=graph_result.reached_target,
+                artifact_path=graph_result.artifact_path,
+                stop_reason=graph_result.stop_reason,
+            )
     else:
         title = " ".join(w.capitalize() for w in skill_name.split("-"))
         (skill_dir / "SKILL.md").write_text(
             build_skill_md(skill_name, title, description, source_path)
         )
 
+    _register_local_skill(root, skill_name, skill_dir, emit=emit, event_kind="create")
+    return SkillCreateResult(path=skill_dir, loop=loop_summary, action="created")
+
+
+def _improve_skill(
+    root: Path,
+    skill_name: str,
+    improvement_goal: str,
+    source_path: str | None,
+    *,
+    emit: Callable[[str], None],
+    llm_model: str | None,
+    source_url: str | None,
+    deepwiki_context: str | None,
+    improvement_loop: bool,
+    target_score: float,
+    max_tries: int,
+) -> SkillCreateResult:
+    from asm.services import llm
+
+    skill_dir = _require_skill_dir(root, skill_name)
+    source_context = _build_skill_source_context(
+        skill_dir,
+        source_path,
+        source_url=source_url,
+        deepwiki_context=deepwiki_context,
+        emit=emit,
+    )
+
+    if source_path:
+        emit("Ingesting source code…")
+        _ingest_source(Path(source_path).resolve(), skill_dir)
+        source_context.supporting_files = _supporting_skill_files(
+            skill_dir,
+            seed_files=source_context.supporting_files,
+        )
+
+    emit("Improving existing skill with LLM…")
+    current_skill_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    revised_desc, revised_body = llm.revise_skill_content(
+        skill_name,
+        current_skill_md,
+        _build_improvement_request(
+            improvement_goal,
+            source_context.prompt_context,
+            current_skill_md=current_skill_md,
+            supporting_files=source_context.supporting_files,
+        ),
+        model=llm_model,
+        supporting_files=source_context.supporting_files,
+    )
+    (skill_dir / "SKILL.md").write_text(
+        _skill_md_from_llm(skill_name, revised_desc, revised_body),
+        encoding="utf-8",
+    )
+    _materialize_missing_support_files_from_skill_md(
+        skill_dir,
+        emit=emit,
+        skill_name=skill_name,
+        model=llm_model,
+    )
+
+    loop_summary = _run_skill_improvement_loop(
+        root,
+        skill_name,
+        llm_model=llm_model,
+        improvement_loop=improvement_loop,
+        target_score=target_score,
+        max_tries=max_tries,
+        emit=emit,
+    )
+    _register_local_skill(root, skill_name, skill_dir, emit=emit, event_kind="update")
+    return SkillCreateResult(path=skill_dir, loop=loop_summary, action="improved")
+
+
+def _build_improvement_request(
+    improvement_goal: str,
+    prompt_context: str | None,
+    *,
+    current_skill_md: str,
+    supporting_files: list[str],
+) -> str:
+    parts = [f"User-requested improvement goal:\n{improvement_goal.strip()}"]
+    if prompt_context:
+        parts.append(f"Additional fresh context:\n{prompt_context}")
+    from asm.services import llm
+
+    runtime_preference = llm.infer_runtime_preference(
+        text_blobs=[improvement_goal, prompt_context or "", current_skill_md],
+        supporting_files=supporting_files,
+    )
+    runtime_guidance = llm.render_runtime_guidance(runtime_preference).strip()
+    if runtime_guidance:
+        parts.append(f"Implementation/runtime constraint:\n{runtime_guidance}")
+    return "\n\n".join(part for part in parts if part).strip()
+
+
+def _run_skill_improvement_loop(
+    root: Path,
+    skill_name: str,
+    *,
+    llm_model: str | None,
+    improvement_loop: bool,
+    target_score: float,
+    max_tries: int,
+    emit: Callable[[str], None],
+) -> SkillCreationLoopSummary | None:
+    if not improvement_loop:
+        return None
+
+    from asm.services import skill_analysis
+
+    graph_result = skill_analysis.run_local_improvement_graph(
+        root,
+        skill_name,
+        model=llm_model,
+        target_score=target_score,
+        max_tries=max_tries,
+        on_progress=emit,
+    )
+    return SkillCreationLoopSummary(
+        attempts=graph_result.attempts,
+        target_score=graph_result.target_score,
+        final_score=graph_result.final_score,
+        reached_target=graph_result.reached_target,
+        artifact_path=graph_result.artifact_path,
+        stop_reason=graph_result.stop_reason,
+    )
+
+
+def _register_local_skill(
+    root: Path,
+    skill_name: str,
+    skill_dir: Path,
+    *,
+    emit: Callable[[str], None],
+    event_kind: str,
+) -> None:
     source_label = f"local:.asm/skills/{skill_name}"
 
     emit("Updating asm.toml…")
     _register_config(root, skill_name, source_label)
 
     emit("Locking integrity hash…")
-    _register_lock(root, skill_name, source_label, skill_dir, {}, event_kind="create")
+    _register_lock(root, skill_name, source_label, skill_dir, {}, event_kind=event_kind)
 
-    return SkillCreateResult(path=skill_dir, loop=loop_summary)
+
+def _materialize_missing_support_files_from_skill_md(
+    skill_dir: Path,
+    *,
+    emit: Callable[[str], None],
+    skill_name: str,
+    model: str | None = None,
+    max_files: int = 8,
+) -> int:
+    """Create missing `references/`, `examples/`, `scripts/`, `assets/` files mentioned in SKILL.md."""
+    import re
+
+    skill_md_path = skill_dir / "SKILL.md"
+    if not skill_md_path.exists():
+        return 0
+
+    text = skill_md_path.read_text(encoding="utf-8", errors="ignore")
+
+    # Extract niche examples block to seed materialized files with consistent usage guidance.
+    niche_match = re.search(
+        r"^##\s+Niche Examples\s*$\n(?P<body>.*?)(?=^##\s+|\Z)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    niche_examples = niche_match.group("body").strip() if niche_match else ""
+
+    # Extract referenced support paths (explicit relative paths).
+    referenced_paths = []
+    pattern = r"(?:references|examples|scripts|assets)/[A-Za-z0-9._/\-]+(?:\.[A-Za-z0-9]+)?"
+    for p in re.findall(pattern, text):
+        p = p.strip().strip("`").rstrip(").,:;")
+        if not p:
+            continue
+        if p not in referenced_paths:
+            referenced_paths.append(p)
+
+    created = 0
+    skill_dir_resolved = skill_dir.resolve()
+    current_skill_md = text
+    existing_supporting_files = _supporting_skill_files(skill_dir)
+    referenced_paths, current_skill_md = _normalize_support_paths_for_runtime(
+        referenced_paths,
+        current_skill_md,
+        existing_supporting_files,
+    )
+    if current_skill_md != text:
+        skill_md_path.write_text(current_skill_md, encoding="utf-8")
+    for rel_path in referenced_paths[:max_files]:
+        target = skill_dir / rel_path
+        try:
+            if not str(target.resolve()).startswith(str(skill_dir_resolved) + "/"):
+                continue
+        except FileNotFoundError:
+            # target doesn't exist yet; safe-check via parent
+            if not str(target.parent.resolve()).startswith(str(skill_dir_resolved) + "/"):
+                continue
+
+        if target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        content = _fallback_materialized_support_content(
+            rel_path,
+            niche_examples=niche_examples,
+        )
+        try:
+            from asm.services import llm
+
+            content = llm.generate_support_file_content(
+                skill_name,
+                current_skill_md,
+                rel_path,
+                niche_examples=niche_examples,
+                model=model,
+                supporting_files=existing_supporting_files,
+            )
+        except Exception:
+            pass
+        target.write_text(content, encoding="utf-8")
+        emit(f"Materialized support file: {rel_path}")
+        created += 1
+        existing_supporting_files = _supporting_skill_files(
+            skill_dir,
+            seed_files=existing_supporting_files + [rel_path],
+        )
+
+    return created
+
+
+def _normalize_support_paths_for_runtime(
+    referenced_paths: list[str],
+    current_skill_md: str,
+    supporting_files: list[str],
+) -> tuple[list[str], str]:
+    """Normalize conflicting script paths to the inferred runtime preference."""
+    from asm.services import llm
+
+    runtime_preference = llm.infer_runtime_preference(
+        text_blobs=[current_skill_md],
+        supporting_files=supporting_files,
+    )
+    normalized_paths: list[str] = []
+    normalized_skill_md = current_skill_md
+    for rel_path in referenced_paths:
+        normalized = _normalize_support_path_for_runtime(rel_path, runtime_preference)
+        if normalized != rel_path:
+            normalized_skill_md = normalized_skill_md.replace(rel_path, normalized)
+        if normalized not in normalized_paths:
+            normalized_paths.append(normalized)
+    return normalized_paths, normalized_skill_md
+
+
+def _normalize_support_path_for_runtime(rel_path: str, runtime_preference: str) -> str:
+    """Rewrite obviously conflicting runnable script paths for the inferred runtime."""
+    if runtime_preference != "python":
+        return rel_path
+    path = Path(rel_path)
+    if not path.parts or path.parts[0] != "scripts":
+        return rel_path
+    if path.suffix.lower() not in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}:
+        return rel_path
+    return path.with_suffix(".py").as_posix()
+
+
+def _fallback_materialized_support_content(
+    rel_path: str,
+    *,
+    niche_examples: str,
+) -> str:
+    """Fallback content when support-file LLM generation fails."""
+    target = Path(rel_path)
+    suffix = target.suffix.lower()
+    if suffix in {".md", ".txt", ".markdown"}:
+        title = target.stem.replace("-", " ").title()
+        examples_block = niche_examples or "(No `## Niche Examples` section found in SKILL.md.)"
+        return "\n".join(
+            [
+                f"# {title}",
+                "",
+                "Generated by ASM as a minimal, evidence-backed usage file.",
+                "Edit/extend this file as you refine the skill.",
+                "",
+                "## Niche Examples",
+                "",
+                examples_block,
+                "",
+                "## Quick Start",
+                "",
+                "1) Locate the main entrypoint for this skill.",
+                "2) Follow the niche example narrative for the exact workflow.",
+                "3) Verify outputs by checking the referenced artifact paths.",
+                "",
+            ]
+        )
+
+    examples_block = niche_examples or "(No `## Niche Examples` section found in SKILL.md.)"
+    if suffix == ".py":
+        return "\n".join(
+            [
+                "#!/usr/bin/env python3",
+                "\"\"\"Minimal runnable helper for replay/trace workflows.\"\"\"",
+                "",
+                "from __future__ import annotations",
+                "",
+                "import argparse",
+                "import json",
+                "from pathlib import Path",
+                "",
+                "",
+                "def main():",
+                "    ap = argparse.ArgumentParser()",
+                "    ap.add_argument('--trace', required=True, help='CDP trace JSON file')",
+                "    ap.add_argument('--out-dir', required=False, default='.', help='Output directory')",
+                "    args = ap.parse_args()",
+                "    trace_path = Path(args.trace)",
+                "    out_dir = Path(args.out_dir)",
+                "    out_dir.mkdir(parents=True, exist_ok=True)",
+                "    data = json.loads(trace_path.read_text(encoding='utf-8'))",
+                "    steps = len(data) if isinstance(data, list) else 1",
+                "    out_path = out_dir / 'replay_summary.json'",
+                "    out_path.write_text(json.dumps({'trace_path': trace_path.as_posix(), 'step_count_estimate': steps}, indent=2), encoding='utf-8')",
+                "    print(f'Wrote {out_path.as_posix()}')",
+                "",
+                "",
+                "if __name__ == '__main__':",
+                "    main()",
+                "",
+            ]
+        )
+    if suffix == ".sh":
+        return "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                "",
+                "scenario=\"\"",
+                "out_dir=\".\"",
+                "",
+                "while [[ $# -gt 0 ]]; do",
+                "  case \"$1\" in",
+                "    --scenario) scenario=\"$2\"; shift 2 ;;",
+                "    --out) out_dir=\"$2\"; shift 2 ;;",
+                "    *) echo \"Unknown arg: $1\"; exit 2 ;;",
+                "  esac",
+                "done",
+                "",
+                "if [[ -z \"$scenario\" ]]; then",
+                "  echo \"--scenario is required\"",
+                "  exit 2",
+                "fi",
+                "",
+                "mkdir -p \"$out_dir/artifacts\"",
+                "echo \"{\\\"scenario\\\": \\\"$scenario\\\"}\" > \"$out_dir/artifacts/trace.json\"",
+                "echo \"<html><body>placeholder</body></html>\" > \"$out_dir/artifacts/dom.html\"",
+                "echo \"Wrote artifacts to $out_dir/artifacts\"",
+                "",
+            ]
+        )
+    return "\n".join(
+        [
+            "#!/usr/bin/env sh",
+            "echo \"Generated minimal artifact.\"",
+            *[f"# {line}" for line in examples_block.splitlines()[:10]],
+            "",
+        ]
+    )
 
 
 # ── Sync (like uv sync) ─────────────────────────────────────────────
@@ -581,7 +1045,12 @@ def _register_lock(
 
     head = snapshots.head_commit(root, name)
     if not head or head.get("snapshot_id") != snapshot_id:
-        msg = "Imported skill" if event_kind == "import" else "Created local skill"
+        if event_kind == "import":
+            msg = "Imported skill"
+        elif event_kind == "update":
+            msg = "Updated local skill"
+        else:
+            msg = "Created local skill"
         snapshots.append_commit(
             root,
             name,
@@ -796,6 +1265,66 @@ def skill_diff(root: Path, name: str, rel_path: str | None = None) -> str:
         skill_dir,
         rel_path=rel_path,
     )
+
+
+def skill_share(
+    root: Path,
+    name: str,
+    *,
+    out_dir: Path | None = None,
+    overwrite: bool = False,
+) -> tuple[Path, Path]:
+    """Package one local skill into a shareable folder and zip archive."""
+    skill_dir = _require_skill_dir(root, name)
+    target_root = (out_dir or (root / "dist" / "skills")).resolve()
+    target_root.mkdir(parents=True, exist_ok=True)
+    target_dir = target_root / name
+    archive_path = target_root / f"{name}.zip"
+
+    if target_dir.exists():
+        if not overwrite:
+            raise ValueError(
+                f"Share folder already exists: {target_dir}. Re-run with --overwrite to replace it."
+            )
+        shutil.rmtree(target_dir)
+    if archive_path.exists():
+        if not overwrite:
+            raise ValueError(
+                f"Share archive already exists: {archive_path}. Re-run with --overwrite to replace it."
+            )
+        archive_path.unlink()
+
+    shutil.copytree(skill_dir, target_dir)
+
+    lock = lockfile.load(paths.lock_path(root))
+    current = lock.get(name)
+    meta = extract_meta(skill_dir)
+    share_manifest = {
+        "name": meta.name or name,
+        "description": meta.description,
+        "version": meta.version,
+        "source": f"local:.asm/skills/{name}",
+        "snapshot_id": current.snapshot_id if current else "",
+        "integrity": lockfile.compute_integrity(skill_dir),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "files": sorted(
+            path.relative_to(target_dir).as_posix()
+            for path in target_dir.rglob("*")
+            if path.is_file()
+        ),
+    }
+    (target_dir / "share.json").write_text(
+        json.dumps(share_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    built_archive = shutil.make_archive(
+        str(target_root / name),
+        "zip",
+        root_dir=target_root,
+        base_dir=name,
+    )
+    return target_dir, Path(built_archive)
 
 
 def _require_skill_dir(root: Path, name: str) -> Path:
