@@ -220,7 +220,7 @@ def create() -> None:
 @click.argument("description")
 @click.option("--from", "source_path", default=None, type=click.Path(exists=True, resolve_path=True), help="Source path to distill.")
 @click.option("--ai", "use_llm", is_flag=True, default=False, help="Generate SKILL.md with LLM (requires API key).")
-@click.option("--model", "llm_model", default=None, envvar="ASM_LLM_MODEL", help="LiteLLM model.")
+@click.option("--model", "llm_model", default=None, envvar="ASM_LLM_MODEL", help="OpenAI model.")
 @click.option("--from-url", "source_url", default=None, metavar="URL", help="URL content as context for --ai.")
 @click.option("--from-repo", "source_repo", default=None, metavar="OWNER/REPO", help="GitHub repo (DeepWiki) as context for --ai.")
 @click.option(
@@ -399,7 +399,7 @@ def create_skill(
         if searched_repos:
             click.echo(f"  Enriched from repos: {', '.join(searched_repos)}")
     if llm_enabled:
-        click.echo("  Content generated with LLM (LiteLLM)")
+        click.echo("  Content generated with LLM (OpenAI)")
     loop_summary = getattr(create_result, "loop", None)
     if loop_summary:
         if loop_summary.artifact_path:
@@ -538,7 +538,7 @@ def expertise_suggest(task_description: str, root: str) -> None:
 
 @expertise_group.command("auto")
 @click.argument("task_description")
-@click.option("--model", "llm_model", default=None, envvar="ASM_LLM_MODEL", help="LiteLLM model.")
+@click.option("--model", "llm_model", default=None, envvar="ASM_LLM_MODEL", help="OpenAI model.")
 @click.option(
     "--path", "root", default=".",
     type=click.Path(exists=True, file_okay=False, resolve_path=True),

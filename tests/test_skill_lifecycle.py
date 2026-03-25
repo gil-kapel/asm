@@ -227,8 +227,7 @@ def test_skill_share_packages_shareable_artifacts(runner, initialized_workspace)
     assert "SKILL.md" in share_manifest["files"]
 
 
-@patch.object(LLMClient, "_ensure_litellm", return_value=None)
-def test_llm_parse_skill_response_accepts_description_prefix(_mock_litellm):
+def test_llm_parse_skill_response_accepts_description_prefix():
     """Description cleanup should not crash on prefixed LLM output."""
     client = LLMClient(model="openai/gpt-5-mini")
     description, body = client._parse_skill_response(
@@ -474,12 +473,12 @@ def test_create_skill_loop_until_target(
                 improvement_prompt=prompt,
             ),
             embedding_profile=EmbeddingProfile(
-                provider="litellm",
-                model="openai/text-embedding-3-small",
+                provider="openai",
+                model="text-embedding-3-small",
                 dimension=1536,
                 normalized=False,
                 distance_metric="cosine",
-                embedding_version="litellm:openai/text-embedding-3-small:1536:cosine:norm=false",
+                embedding_version="openai:text-embedding-3-small:1536:cosine:norm=false",
                 analysis_mode="local-llm",
             ),
         )
@@ -554,12 +553,12 @@ def test_create_skill_loop_stops_when_rewrite_is_empty(
             improvement_prompt="Try a better rewrite.",
         ),
         embedding_profile=EmbeddingProfile(
-            provider="litellm",
-            model="openai/text-embedding-3-small",
+            provider="openai",
+            model="text-embedding-3-small",
             dimension=1536,
             normalized=False,
             distance_metric="cosine",
-            embedding_version="litellm:openai/text-embedding-3-small:1536:cosine:norm=false",
+            embedding_version="openai:text-embedding-3-small:1536:cosine:norm=false",
             analysis_mode="local-llm",
         ),
     )
@@ -634,12 +633,12 @@ def test_create_skill_loop_materializes_research_when_evidence_low(
                 improvement_prompt=prompt,
             ),
             embedding_profile=EmbeddingProfile(
-                provider="litellm",
-                model="openai/text-embedding-3-small",
+                provider="openai",
+                model="text-embedding-3-small",
                 dimension=1536,
                 normalized=False,
                 distance_metric="cosine",
-                embedding_version="litellm:openai/text-embedding-3-small:1536:cosine:norm=false",
+                embedding_version="openai:text-embedding-3-small:1536:cosine:norm=false",
                 analysis_mode="local-llm",
             ),
         )
@@ -758,12 +757,12 @@ def test_create_skill_loop_materializes_missing_support_files_from_skill_md(
                 improvement_prompt=prompt,
             ),
             embedding_profile=EmbeddingProfile(
-                provider="litellm",
-                model="openai/text-embedding-3-small",
+                provider="openai",
+                model="text-embedding-3-small",
                 dimension=1536,
                 normalized=False,
                 distance_metric="cosine",
-                embedding_version="litellm:openai/text-embedding-3-small:1536:cosine:norm=false",
+                embedding_version="openai:text-embedding-3-small:1536:cosine:norm=false",
                 analysis_mode="local-llm",
             ),
         )
@@ -842,12 +841,12 @@ def test_create_skill_loop_quality_gate_blocks_placeholder_support_files(
             improvement_prompt="Looks good at a glance.",
         ),
         embedding_profile=EmbeddingProfile(
-            provider="litellm",
-            model="openai/text-embedding-3-small",
+            provider="openai",
+            model="text-embedding-3-small",
             dimension=1536,
             normalized=False,
             distance_metric="cosine",
-            embedding_version="litellm:openai/text-embedding-3-small:1536:cosine:norm=false",
+            embedding_version="openai:text-embedding-3-small:1536:cosine:norm=false",
             analysis_mode="local-llm",
         ),
     )

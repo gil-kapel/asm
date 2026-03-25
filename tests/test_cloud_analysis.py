@@ -85,12 +85,12 @@ def test_analyze_skill_cloud_saves_local_artifact(runner, initialized_workspace,
             improvement_prompt="Improve the artifact skill.",
         ),
         embedding_profile=EmbeddingProfile(
-            provider="litellm",
+            provider="openai",
             model="text-embedding-3-small",
             dimension=1536,
             normalized=False,
             distance_metric="cosine",
-            embedding_version="litellm:text-embedding-3-small:1536:cosine:norm=false",
+            embedding_version="openai:text-embedding-3-small:1536:cosine:norm=false",
             analysis_mode="cloud",
         ),
     )
@@ -193,26 +193,22 @@ def test_analyze_skill_local_raises_when_openai_feedback_fails(runner, initializ
         )
 
 
-@patch.object(LLMClient, "_ensure_litellm", return_value=None)
-def test_llm_client_completion_pydantic_requests_model_schema(_mock_litellm, monkeypatch):
+def test_llm_client_completion_pydantic_uses_openai_responses_parse(monkeypatch):
     calls: list[dict] = []
 
     class _TestSchema(BaseModel):
         status: str
 
-    def _fake_completion(**kwargs):
-        calls.append(kwargs)
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content='{"status":"ok"}')
-                )
-            ]
-        )
+    class _FakeResponses:
+        def parse(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=_TestSchema(status="ok"))
 
-    import litellm
+    class _FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = _FakeResponses()
 
-    monkeypatch.setattr(litellm, "completion", _fake_completion)
+    monkeypatch.setattr("asm.services.llm.OpenAI", _FakeOpenAI)
     client = LLMClient(model="openai/gpt-5-mini")
 
     payload = client.completion_pydantic(
@@ -222,32 +218,29 @@ def test_llm_client_completion_pydantic_requests_model_schema(_mock_litellm, mon
     )
 
     assert payload.status == "ok"
-    assert calls[0]["response_format"]["type"] == "json_schema"
-    assert calls[0]["response_format"]["json_schema"]["name"] == "test_schema"
-    assert calls[0]["response_format"]["json_schema"]["schema"]["required"] == ["status"]
+    assert calls[0]["model"] == "gpt-5-mini"
+    assert calls[0]["text_format"] is _TestSchema
 
 
-@patch.object(LLMClient, "_ensure_litellm", return_value=None)
-def test_llm_client_completion_pydantic_strictifies_defaulted_fields(_mock_litellm, monkeypatch):
+def test_llm_client_completion_pydantic_preserves_defaulted_fields(monkeypatch):
     calls: list[dict] = []
 
     class _TestSchema(BaseModel):
         required_text: str
         default_list: list[str] = []
 
-    def _fake_completion(**kwargs):
-        calls.append(kwargs)
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content='{"required_text":"ok","default_list":[]}')
-                )
-            ]
-        )
+    class _FakeResponses:
+        def parse(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_parsed=_TestSchema(required_text="ok", default_list=[])
+            )
 
-    import litellm
+    class _FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = _FakeResponses()
 
-    monkeypatch.setattr(litellm, "completion", _fake_completion)
+    monkeypatch.setattr("asm.services.llm.OpenAI", _FakeOpenAI)
     client = LLMClient(model="openai/gpt-5-mini")
 
     payload = client.completion_pydantic(
@@ -257,10 +250,9 @@ def test_llm_client_completion_pydantic_strictifies_defaulted_fields(_mock_litel
     )
 
     assert payload.required_text == "ok"
-    assert calls[0]["response_format"]["json_schema"]["schema"]["required"] == [
-        "required_text",
-        "default_list",
-    ]
+    assert payload.default_list == []
+    assert calls[0]["model"] == "gpt-5-mini"
+    assert calls[0]["text_format"] is _TestSchema
 
 
 def test_openai_analysis_feedback_service_uses_async_parse(runner, initialized_workspace, monkeypatch):

@@ -92,7 +92,7 @@ The saved artifact includes:
 
 ### Local analysis config
 
-For `--local`, configure a LiteLLM model plus a provider key:
+For `--local`, configure an OpenAI model plus `OPENAI_API_KEY`:
 
 ```bash
 mkdir -p ~/.asm-cli

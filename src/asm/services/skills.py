@@ -213,8 +213,8 @@ def create_skill(
 ) -> SkillCreateResult:
     """Scaffold a new SKILL.md package and register it.
 
-    When use_llm is True, calls the LLM service (LiteLLM) to generate
-    description and body; requires provider API key (e.g. OPENAI_API_KEY).
+    When use_llm is True, calls the OpenAI-backed LLM service to generate
+    description and body; requires `OPENAI_API_KEY`.
     When source_url is set (e.g. GitHub API contents URL), fetches that
     content and uses it as additional context for the LLM.
     When deepwiki_context is set, includes DeepWiki-generated repo docs

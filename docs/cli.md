@@ -21,7 +21,7 @@ ASM exposes a single entrypoint, `asm`, with subcommands grouped by workflow. Fo
 | `asm add skill <source>` | Install a skill from GitHub, Smithery, Playbooks, or a local path. |
 | `asm skill list` | List skills registered in the workspace. |
 | `asm skill analyze <name> --cloud` | Submit one local skill to the ASM cloud analyzer and store the latest scorecard under `.asm/analysis/`. |
-| `asm skill analyze <name> --local` | Analyze one local skill with LiteLLM using `ASM_LLM_MODEL` and a provider API key. |
+| `asm skill analyze <name> --local` | Analyze one local skill with OpenAI using `ASM_LLM_MODEL` and `OPENAI_API_KEY`. |
 | `asm create skill <name> <desc>` | Scaffold a new skill package, optionally with `--ai`, `--github-search`, or iterative `--loop` refinement. |
 | `asm skill share <name>` | Package one local skill into `dist/skills/` as a folder plus zip archive for publishing or reuse. |
 | `asm skill commit <name> -m <msg>` | Commit local changes of a skill. |
@@ -41,10 +41,10 @@ asm create skill sqlmodel-database "Async SQLModel patterns" --loop
 asm create skill sqlmodel-database "Async SQLModel patterns" --loop --target-score 0.9 --max-tries 5
 ```
 
-`--loop` uses the same LiteLLM setup as `--ai` and local analysis:
+`--loop` uses the same OpenAI setup as `--ai` and local analysis:
 
 - `ASM_LLM_MODEL` or `--model`
-- a provider API key such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
 
 When enabled, ASM:
 
@@ -97,10 +97,10 @@ asm skill analyze my-skill --cloud --api-url http://127.0.0.1:8000
 
 ### Local mode
 
-`--local` uses LiteLLM on the current machine. It requires:
+`--local` uses OpenAI on the current machine. It requires:
 
 - `ASM_LLM_MODEL` or `--model`
-- a provider API key such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
 
 Example user-level config:
 

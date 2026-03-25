@@ -13,7 +13,7 @@ ASM manages a project-local `.asm/` skill graph and syncs it into Cursor / Claud
 
 - **Curated Index**: Verified, high-quality skills with non-obvious knowledge and actionable patterns.
 - **Expertise Layer**: Bundle skills into task-oriented domains for autonomous agent selection and auto-configuration.
-- **Semantic Search**: Embedding-based lookup (via LiteLLM) with local caching for sub-second relevance.
+- **Semantic Search**: Embedding-based lookup (via OpenAI embeddings) with local caching for sub-second relevance.
 - **Reproducible Graphs**: `asm.toml` + `asm.lock` pin exact skill sources and hashes.
 - **Zero-Touch Sync**: Keeps Cursor / Claude / Codex configs in sync with your `.asm/` graph.
 
@@ -311,7 +311,7 @@ asm search "frontend design" --limit 5
 
 ASM performs federated discovery across available providers (ASM index, Smithery, Playbooks, GitHub, SkillsMP).
 - **[curated]**: Verified skills with quality scoring rank first.
-- **Semantic Ranking**: Query embeddings (via LiteLLM) are matched against skill triggers for high relevance.
+- **Semantic Ranking**: Query embeddings (via OpenAI embeddings) are matched against skill triggers for high relevance.
 - **Local Cache**: Embeddings are cached in `~/.asm-cli/embeddings.msgpack` for instant search.
 
 ### Add from Smithery / Playbooks links
@@ -359,9 +359,9 @@ echo 'export SKILLSMP_API_KEY=sk_live_skillsmp_...' >> ~/.zshrc
 
 ### Configure ASM cloud analyzer
 
-Skill analysis can run locally with LiteLLM or in the managed cloud.
+Skill analysis can run locally with OpenAI or in the managed cloud.
 
-For local analysis, configure a model plus a provider key:
+For local analysis, configure an OpenAI model and key:
 
 ```bash
 mkdir -p ~/.asm-cli
@@ -375,7 +375,7 @@ Run:
 
 ```bash
 asm skill analyze my-skill --local
-asm skill analyze my-skill --local --model anthropic/claude-3-5-sonnet
+asm skill analyze my-skill --local --model openai/gpt-5-mini
 ```
 
 For cloud analysis, set the analyzer URL in a user-level env file:
@@ -471,37 +471,37 @@ asm create skill auth-utils "Project auth conventions" --from ./src/auth/ --ai
 - **`--from-repo OWNER/REPO`**: Fetches the README, directory structure, and key source files via GitHub API as context for the LLM.
 - **`--github-search QUERY`**: Searches GitHub repositories, picks the top matches, and enriches the skill with DeepWiki-style repo context from those results.
 - **`--github-search-limit`**: Caps how many search-result repos are used for enrichment.
-- **`--ai`**: Use LiteLLM to generate sophisticated instructions, usage guidelines, and examples.
+- **`--ai`**: Use OpenAI to generate sophisticated instructions, usage guidelines, and examples.
 - **`--from ./path`**: Analyzes local code to extract internal patterns and conventions.
 
-### AI-assisted skill creation (LiteLLM)
+### AI-assisted skill creation (OpenAI)
 
-ASM can generate SKILL.md content (Instructions, Usage, Examples) using an LLM via [LiteLLM](https://github.com/BerriAI/litellm). Install the optional extra and set a provider API key:
+ASM can generate SKILL.md content (Instructions, Usage, Examples) using the OpenAI API. Install ASM and set `OPENAI_API_KEY`:
 
 ```bash
 uv tool install asm   # or: pip install asm
-export OPENAI_API_KEY=sk-...   # or ANTHROPIC_API_KEY, etc.
+export OPENAI_API_KEY=sk-...
 ```
 
 Create a skill with generated content:
 
 ```bash
 asm create skill pdf-helper "Extract text and tables from PDFs" --ai
-asm create skill cli-ux "CLI UX patterns for Click" --ai --model anthropic/claude-3-5-sonnet
+asm create skill cli-ux "CLI UX patterns for Click" --ai --model openai/gpt-5-mini
 asm create skill sqlmodel-database "Async SQLModel patterns" --loop --target-score 0.9 --max-tries 5
 asm create skill sqlmodel-database "Async SQLModel patterns" --github-search "sqlmodel alembic async"
 ```
 
-- **`--ai`**: Use LiteLLM to generate the skill description and body.
+- **`--ai`**: Use OpenAI to generate the skill description and body.
 - **`--loop`**: Turn on a build -> analyze -> rewrite loop. ASM uses the local scorecard's `improvement_prompt`, and when `evidence_grounding` or `trigger_specificity` is low it automatically fetches DeepWiki/GitHub evidence and materializes it into `references/research-iteration-<n>.md` before rewriting.
-- **`--model`**: LiteLLM model string (default: `openai/gpt-4o-mini`). Can be set with `ASM_LLM_MODEL`.
+- **`--model`**: OpenAI model string (default: `gpt-4o-mini`). Can be set with `ASM_LLM_MODEL`.
 - **`--target-score`**: Loop stop threshold from `0.0` to `1.0` for the aggregate local analysis score.
 - **`--max-tries`**: Maximum number of build/analyze/rewrite passes when `--loop` is enabled.
 - **`--from ./path`**: Local file or directory; the LLM receives its content as context.
 - **`--from-url URL`**: Fetch content from a URL and use it as context for the LLM. Supports GitHub API contents (e.g. `https://api.github.com/repos/owner/repo/contents/README.md?ref=main`) and raw URLs; directories are expanded by fetching each file.
 - **`--github-search QUERY`**: Search GitHub repos, fetch the top repo docs and key files, and use that bundle as extra LLM context.
 
-LiteLLM supports 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, etc.) with a single interface; set the corresponding API key and use the `provider/model-name` format for `--model`.
+ASM now uses the native OpenAI client. `--model` accepts either raw OpenAI model names like `gpt-5-mini` or `openai/gpt-5-mini`.
 
 ### Share your skill
 
@@ -732,7 +732,7 @@ asm.toml ──► asm sync ──► .asm/skills/       (fetch missing)
 | `asm search <query>` | Federated discovery across healthy registries/providers |
 | `asm add skill <source>` | Install a skill from GitHub or local path |
 | `asm skill list` | List skills registered in the workspace |
-| `asm skill analyze <name> --local` | Analyze one local skill with LiteLLM using `ASM_LLM_MODEL` and a provider API key |
+| `asm skill analyze <name> --local` | Analyze one local skill with OpenAI using `ASM_LLM_MODEL` and `OPENAI_API_KEY` |
 | `asm skill analyze <name> --cloud` | Submit one local skill to the optional ASM cloud analyzer |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |
@@ -788,7 +788,7 @@ _ASM_COMPLETE=fish_source asm > ~/.config/fish/completions/asm.fish
 | `asm search <query>` | Federated discovery across healthy registries/providers |
 | `asm add skill <source>` | Install a skill from GitHub or local path |
 | `asm skill list` | List skills registered in the workspace |
-| `asm skill analyze <name> --local` | Analyze one local skill with LiteLLM using `ASM_LLM_MODEL` and a provider API key |
+| `asm skill analyze <name> --local` | Analyze one local skill with OpenAI using `ASM_LLM_MODEL` and `OPENAI_API_KEY` |
 | `asm skill analyze <name> --cloud` | Submit one local skill to the optional ASM cloud analyzer |
 | `asm create skill <name> <desc>` | Scaffold a new skill package |
 | `asm create skill <name> <desc> --from <path>` | Create a skill from existing code |

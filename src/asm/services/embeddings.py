@@ -1,7 +1,7 @@
 """Embedding service with API-based vectors and local msgpack cache.
 
-Uses LiteLLM for embedding API calls (same optional dependency as llm.py).
-Falls back to BLAKE2b hash-based vectors when LiteLLM or API keys are unavailable.
+Uses the OpenAI embeddings API for remote vectors.
+Falls back to BLAKE2b hash-based vectors when OpenAI or API keys are unavailable.
 Cache is content-addressed at ~/.asm-cli/embeddings.msgpack.
 """
 
@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import msgpack
+from openai import OpenAI
 from asm.core.models import EmbeddingProfile
 
 _EMBED_DIM_HASH = 128
@@ -66,29 +67,18 @@ def _content_key(text: str, profile: EmbeddingProfile) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _litellm_available() -> bool:
-    try:
-        import litellm  # noqa: F401
-        return True
-    except ImportError:
-        return False
-
-
 def _has_api_key() -> bool:
-    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AZURE_API_KEY"):
-        if os.environ.get(key, "").strip():
-            return True
-    return False
+    return bool(os.environ.get("OPENAI_API_KEY", "").strip())
 
 
 def _get_model() -> str:
-    return os.environ.get("ASM_EMBED_MODEL", _DEFAULT_MODEL).strip()
+    return _normalize_openai_model(os.environ.get("ASM_EMBED_MODEL"))
 
 
 def current_profile(*, analysis_mode: str = "local") -> EmbeddingProfile:
     """Return the active embedding profile for cache/version provenance."""
     api_enabled = can_use_api()
-    provider = "litellm" if api_enabled else "hash-fallback"
+    provider = "openai" if api_enabled else "hash-fallback"
     model = _get_model() if api_enabled else "asm-hash-v1"
     dimension = _EMBED_DIM_API if api_enabled else _EMBED_DIM_HASH
     embedding_version = f"{provider}:{model}:{dimension}:{_DISTANCE_METRIC}:norm={str(_NORMALIZED).lower()}"
@@ -119,7 +109,7 @@ def profile_from_dict(raw: dict, *, analysis_mode: str = "local") -> EmbeddingPr
 
 def can_use_api() -> bool:
     """True when real API-based embeddings are available."""
-    return _litellm_available() and _has_api_key()
+    return _has_api_key() and _supports_openai_model(os.environ.get("ASM_EMBED_MODEL"))
 
 
 def embed(text: str) -> list[float]:
@@ -207,17 +197,15 @@ def _zero_vector() -> list[float]:
 
 
 def _embed_api(text: str) -> list[float]:
-    import litellm
     model = _get_model()
     try:
-        response = litellm.embedding(model=model, input=[text])
-        return response.data[0]["embedding"]
+        response = _client().embeddings.create(model=model, input=[text])
+        return response.data[0].embedding
     except Exception:
         return _hash_embedding(text)
 
 
 def _embed_api_batch(texts: list[str]) -> list[list[float]]:
-    import litellm
     model = _get_model()
     batch_size = 100
     all_vectors: list[list[float]] = []
@@ -225,9 +213,9 @@ def _embed_api_batch(texts: list[str]) -> list[list[float]]:
     for start in range(0, len(texts), batch_size):
         chunk = texts[start : start + batch_size]
         try:
-            response = litellm.embedding(model=model, input=chunk)
-            sorted_data = sorted(response.data, key=lambda d: d["index"])
-            all_vectors.extend(d["embedding"] for d in sorted_data)
+            response = _client().embeddings.create(model=model, input=chunk)
+            sorted_data = sorted(response.data, key=lambda d: d.index)
+            all_vectors.extend(d.embedding for d in sorted_data)
         except Exception:
             all_vectors.extend(_hash_embedding(t) for t in chunk)
 
@@ -250,3 +238,28 @@ def _hash_embedding(text: str) -> list[float]:
 
 def _tokens(text: str) -> set[str]:
     return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= 2}
+
+
+def _client() -> OpenAI:
+    return OpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        base_url=os.environ.get("OPENAI_BASE_URL") or None,
+    )
+
+
+def _normalize_openai_model(model: str | None) -> str:
+    raw = (model or _DEFAULT_MODEL).strip()
+    if not raw:
+        return _DEFAULT_MODEL
+    if "/" in raw:
+        provider, _, candidate = raw.partition("/")
+        if provider != "openai":
+            raise ValueError(f"ASM embeddings only support OpenAI models now. Got: {raw}")
+        normalized = candidate.strip()
+        return normalized or _DEFAULT_MODEL
+    return raw
+
+
+def _supports_openai_model(model: str | None) -> bool:
+    raw = (model or "").strip()
+    return not raw or "/" not in raw or raw.startswith("openai/")

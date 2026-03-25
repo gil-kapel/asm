@@ -1,6 +1,6 @@
 """LLM-backed generation for skill content.
 
-Uses LiteLLM for completions (required dependency).
+Uses the OpenAI Responses API for completions.
 Provides a robust client with centralized configuration and error handling.
 """
 
@@ -14,12 +14,13 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, TypeVar
 
+from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
 # Default configuration
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 4096
 BODY_DELIMITER = "---BODY---"
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
@@ -39,44 +40,51 @@ class ParsingError(LLMError):
 
 
 class LLMClient:
-    """A robust client for LLM operations via LiteLLM."""
+    """A robust client for OpenAI-backed LLM operations."""
 
     def __init__(self, model: Optional[str] = None):
-        """Initialize the client, ensuring LiteLLM is available."""
-        self._ensure_litellm()
-        self.model = (model or os.environ.get("ASM_LLM_MODEL") or DEFAULT_MODEL).strip()
-
-    def _ensure_litellm(self) -> None:
-        """Check for LiteLLM and provide a helpful error if missing."""
-        try:
-            import litellm  # noqa: F401
-        except ImportError as e:
-            raise LLMError(
-                "LLM support requires litellm. Reinstall asm: uv tool install asm or pip install -U asm"
-            ) from e
+        """Initialize the client with normalized OpenAI settings."""
+        self.model = _normalize_openai_model(model)
+        self._client: OpenAI | None = None
 
     def _completion_response(
         self,
         messages: List[dict[str, str]],
         max_tokens: int = DEFAULT_MAX_TOKENS,
         num_retries: int = 2,
+        response_model: type[StructuredModelT] | None = None,
         **kwargs: Any,
     ) -> Any:
         """Execute a chat completion and return the raw provider response."""
-        import litellm
 
         try:
             logger.debug("Executing LLM completion with model: %s", self.model)
-            return litellm.completion(
+            client = self._get_client()
+            if response_model is not None:
+                return client.responses.parse(
+                    model=self.model,
+                    input=messages,
+                    max_output_tokens=max_tokens,
+                    text_format=response_model,
+                    **kwargs,
+                )
+            return client.responses.create(
                 model=self.model,
-                messages=messages,
-                max_tokens=max_tokens,
-                num_retries=num_retries,
+                input=messages,
+                max_output_tokens=max_tokens,
                 **kwargs,
             )
         except Exception as e:
-            logger.error("LLM completion failed: %s", e)
+            logger.error("LLM completion failed after %s retries: %s", num_retries, e)
             raise ProviderError(f"LLM provider error: {e}") from e
+
+    def _get_client(self) -> OpenAI:
+        if self._client is None:
+            self._client = OpenAI(
+                api_key=os.environ.get("OPENAI_API_KEY"),
+                base_url=os.environ.get("OPENAI_BASE_URL") or None,
+            )
+        return self._client
 
     def completion(
         self,
@@ -118,12 +126,12 @@ class LLMClient:
                 messages=messages,
                 max_tokens=max_tokens,
                 num_retries=num_retries,
-                response_format=response_format,
+                response_model=response_model,
             )
         except ProviderError:
             logger.warning("Structured output unavailable for model %s; retrying with plain JSON prompt.", self.model)
             response = self._completion_response(
-                messages=messages,
+                messages=_append_json_schema_instruction(messages, response_format),
                 max_tokens=max_tokens,
                 num_retries=num_retries,
             )
@@ -376,7 +384,13 @@ class LLMClient:
 
     def _extract_response_text(self, response: Any) -> str:
         """Extract the most useful text payload from a provider response."""
-        message = response.choices[0].message
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
+
+        message = _extract_message(response)
+        if message is None:
+            return ""
         content = getattr(message, "content", None)
         if isinstance(content, str) and content.strip():
             return content
@@ -412,8 +426,10 @@ class LLMClient:
         response_model: type[StructuredModelT],
     ) -> StructuredModelT:
         """Validate a structured model response into a Pydantic object."""
-        message = response.choices[0].message
-        parsed = getattr(message, "parsed", None)
+        parsed = getattr(response, "output_parsed", None)
+        if parsed is None:
+            message = _extract_message(response)
+            parsed = getattr(message, "parsed", None) if message is not None else None
         if parsed is not None:
             try:
                 return response_model.model_validate(parsed)
@@ -462,6 +478,47 @@ def _strict_json_schema_node(node: Any) -> Any:
         node.setdefault("additionalProperties", False)
 
     return node
+
+
+def _normalize_openai_model(model: Optional[str]) -> str:
+    raw = (model or os.environ.get("ASM_LLM_MODEL") or DEFAULT_MODEL).strip()
+    if not raw:
+        return DEFAULT_MODEL
+    if "/" in raw:
+        provider, _, candidate = raw.partition("/")
+        if provider != "openai":
+            raise LLMError(f"ASM only supports OpenAI models now. Got: {raw}")
+        normalized = candidate.strip()
+        return normalized or DEFAULT_MODEL
+    return raw
+
+
+def _append_json_schema_instruction(
+    messages: list[dict[str, str]],
+    response_format: dict[str, Any],
+) -> list[dict[str, str]]:
+    schema = json.dumps(response_format["json_schema"]["schema"], indent=2, sort_keys=True)
+    instructions = (
+        "Return valid JSON only. Do not use markdown fences.\n"
+        "Your response must match this JSON schema exactly:\n"
+        f"{schema}"
+    )
+    return [
+        *messages,
+        {"role": "system", "content": instructions},
+    ]
+
+
+def _extract_message(response: Any) -> Any | None:
+    choices = getattr(response, "choices", None)
+    if choices:
+        return choices[0].message
+
+    output = getattr(response, "output", None) or []
+    for item in output:
+        if getattr(item, "type", None) == "message":
+            return item
+    return None
 
 
 def infer_runtime_preference(

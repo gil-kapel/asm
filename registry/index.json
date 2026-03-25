@@ -139,11 +139,11 @@
     },
     {
       "name": "llm-structured-output",
-      "description": "LLM API calls with typed responses using LiteLLM, JSON schema, response_format, and Pydantic models.",
+      "description": "LLM API calls with typed responses using OpenAI, JSON schema, response parsing, and Pydantic models.",
       "source": "local:.asm/skills/llm-structured-output",
       "quality_score": 0.7,
       "verified": true,
-      "tags": ["llm", "structured-output", "litellm", "pydantic"],
+      "tags": ["llm", "structured-output", "openai", "pydantic"],
       "use_when": "Calling LLM APIs with typed responses, parsing tool calls, building structured LLM workflows"
     }
   ]
