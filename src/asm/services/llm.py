@@ -7,7 +7,6 @@ Provides a robust client with centralized configuration and error handling.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 from copy import deepcopy
@@ -16,8 +15,9 @@ from typing import Any, List, Optional, Tuple, TypeVar
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
-
-logger = logging.getLogger(__name__)
+from dotenv import load_dotenv
+from loguru import logger
+load_dotenv()
 
 # Default configuration
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -81,8 +81,8 @@ class LLMClient:
     def _get_client(self) -> OpenAI:
         if self._client is None:
             self._client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY"),
-                base_url=os.environ.get("OPENAI_BASE_URL") or None,
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("OPENAI_BASE_URL") or None,
             )
         return self._client
 
