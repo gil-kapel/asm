@@ -15,8 +15,9 @@ from pathlib import Path
 
 from asm.core import paths
 from asm.core.frontmatter import extract_meta, validate
-from asm.core.models import LockEntry, SkillEntry, SkillMeta
+from asm.core.models import FetchPolicy, LockEntry, SkillEntry, SkillMeta
 from asm.fetchers import fetch, parse_source
+from asm.fetchers.safe_tree import copy_skill_tree
 from asm.repo import config, lockfile, snapshots
 from asm.templates import build_skill_md
 
@@ -159,13 +160,15 @@ def add_skill(
 
     _guard_duplicate(root, location, name_override)
 
+    policy = config.load(root / paths.ASM_TOML).fetch
+
     emit(
         "Copying from local path…"
         if source_type == "local"
         else "Fetching skill…"
     )
     dest_tmp = Path(tempfile.mkdtemp()) / "staging"
-    extra = fetch(source_type, location, dest_tmp, root=root)
+    extra = fetch(source_type, location, dest_tmp, root=root, policy=policy)
 
     emit("Validating SKILL.md…")
     ok, msg = _validate_with_name_fallback(dest_tmp, location)
@@ -181,7 +184,7 @@ def add_skill(
     meta = SkillMeta(name=skill_name, description=meta.description, version=meta.version)
 
     emit(f"Installing {skill_name}…")
-    final_dest = _install(dest_tmp, paths.skills_dir(root) / skill_name)
+    final_dest = _install(dest_tmp, paths.skills_dir(root) / skill_name, policy)
 
     source_label = extra.get("registry_source") or _normalise_source(source_raw, source_type)
 
@@ -882,9 +885,10 @@ def _fetch_and_install_entry(
 ) -> LockEntry:
     """Fetch, validate, install a single skill. Returns its LockEntry."""
     source_type, location = parse_source(source)
+    policy = config.load(root / paths.ASM_TOML).fetch
 
     dest_tmp = Path(tempfile.mkdtemp()) / "staging"
-    extra = fetch(source_type, location, dest_tmp, root=root)
+    extra = fetch(source_type, location, dest_tmp, root=root, policy=policy)
 
     ok, msg = _validate_with_name_fallback(dest_tmp, location)
     if not ok:
@@ -895,7 +899,7 @@ def _fetch_and_install_entry(
         )
 
     meta = extract_meta(dest_tmp)
-    final_dest = _install(dest_tmp, paths.skills_dir(root) / name)
+    final_dest = _install(dest_tmp, paths.skills_dir(root) / name, policy)
     snapshot_id = snapshots.ensure_snapshot(root, name, final_dest)
     integrity = lockfile.compute_integrity(final_dest)
     return _build_lock_entry(
@@ -934,11 +938,9 @@ def _resolve_name(
     return name
 
 
-def _install(staging: Path, dest: Path) -> Path:
+def _install(staging: Path, dest: Path, policy: FetchPolicy) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(staging, dest)
+    copy_skill_tree(staging, dest, policy)
     shutil.rmtree(staging.parent, ignore_errors=True)
     return dest
 

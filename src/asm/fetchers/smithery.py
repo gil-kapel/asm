@@ -11,7 +11,8 @@ def fetch_ref(location: str) -> str:
     """Resolve Smithery location into a concrete GitHub skill URL."""
     namespace, slug = _parse_location(location)
     api_url = f"https://api.smithery.ai/skills/{namespace}/{slug}"
-    resp = httpx.get(api_url, timeout=10.0, follow_redirects=True)
+    with httpx.Client(timeout=10.0, follow_redirects=True, max_redirects=10) as client:
+        resp = client.get(api_url)
     resp.raise_for_status()
     payload = resp.json()
     if not isinstance(payload, dict):

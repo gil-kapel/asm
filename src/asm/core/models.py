@@ -244,6 +244,25 @@ class AgentsConfig:
 
 
 @dataclass
+class FetchPolicy:
+    """Guards skill fetch/install: allowed git hosts, local paths, size caps."""
+
+    allow_local: bool = True
+    allowed_git_hosts: list[str] = field(default_factory=lambda: ["github.com"])
+    max_total_bytes: int | None = None
+    max_file_count: int | None = None
+
+    @staticmethod
+    def default_policy() -> FetchPolicy:
+        return FetchPolicy(
+            allow_local=True,
+            allowed_git_hosts=["github.com"],
+            max_total_bytes=None,
+            max_file_count=None,
+        )
+
+
+@dataclass
 class AsmConfig:
     """Root configuration object for asm.toml."""
 
@@ -252,6 +271,7 @@ class AsmConfig:
     skills: dict[str, SkillEntry] = field(default_factory=dict)
     expertises: dict[str, ExpertiseRef] = field(default_factory=dict)
     agents: AgentsConfig = field(default_factory=AgentsConfig)
+    fetch: FetchPolicy = field(default_factory=FetchPolicy.default_policy)
 
 
 # ── Discovery layer ──────────────────────────────────────────────────

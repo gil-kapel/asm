@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from asm.core import paths
+from asm.core.models import FetchPolicy
 from asm.fetchers import github, local, playbooks, smithery
+from asm.repo import config
 
 
 def parse_source(raw: str) -> tuple[str, str]:
@@ -43,19 +46,39 @@ def parse_source(raw: str) -> tuple[str, str]:
     return "github", raw
 
 
-def fetch(source_type: str, location: str, dest: Path, *, root: Path | None = None) -> dict:
+def _resolve_policy(root: Path | None, policy: FetchPolicy | None) -> FetchPolicy:
+    if policy is not None:
+        return policy
+    if root is not None:
+        cfg_path = root / paths.ASM_TOML
+        if cfg_path.exists():
+            return config.load(cfg_path).fetch
+    return FetchPolicy.default_policy()
+
+
+def fetch(
+    source_type: str,
+    location: str,
+    dest: Path,
+    *,
+    root: Path | None = None,
+    policy: FetchPolicy | None = None,
+) -> dict:
     """Dispatch to the appropriate fetcher.
 
     *root* is passed to local fetcher for resolving relative paths.
+    When *policy* is None and *root* is set, load ``[fetch]`` from asm.toml.
     Returns a dict with optional keys: commit, resolved.
     """
+    pol = _resolve_policy(root, policy)
+
     if source_type == "local":
-        local.fetch(location, dest, root=root)
+        local.fetch(location, dest, root=root, policy=pol)
         return {}
 
     if source_type == "github":
-        commit = github.fetch(location, dest)
-        repo_url, branch, subpath = github.parse_ref(location)
+        commit = github.fetch(location, dest, policy=pol)
+        repo_url, branch, subpath = github.parse_ref(location, pol)
         resolved = repo_url.replace(".git", "") + f"/tree/{branch}"
         if subpath:
             resolved += f"/{subpath}"
@@ -63,8 +86,8 @@ def fetch(source_type: str, location: str, dest: Path, *, root: Path | None = No
 
     if source_type == "smithery":
         gh_ref = smithery.fetch_ref(location)
-        commit = github.fetch(gh_ref, dest)
-        repo_url, branch, subpath = github.parse_ref(gh_ref)
+        commit = github.fetch(gh_ref, dest, policy=pol)
+        repo_url, branch, subpath = github.parse_ref(gh_ref, pol)
         resolved = repo_url.replace(".git", "") + f"/tree/{branch}"
         if subpath:
             resolved += f"/{subpath}"
@@ -77,8 +100,8 @@ def fetch(source_type: str, location: str, dest: Path, *, root: Path | None = No
 
     if source_type == "playbooks":
         gh_ref = playbooks.fetch_ref(location)
-        commit = github.fetch(gh_ref, dest)
-        repo_url, branch, subpath = github.parse_ref(gh_ref)
+        commit = github.fetch(gh_ref, dest, policy=pol)
+        repo_url, branch, subpath = github.parse_ref(gh_ref, pol)
         resolved = repo_url.replace(".git", "") + f"/tree/{branch}"
         if subpath:
             resolved += f"/{subpath}"

@@ -12,6 +12,7 @@ from asm.core.models import (
     AsmConfig,
     AsmMeta,
     ExpertiseRef,
+    FetchPolicy,
     ProjectConfig,
     SkillPolicy,
     SkillEntry,
@@ -80,6 +81,17 @@ def dump(cfg: AsmConfig) -> str:
         agents.add("copilot", cfg.agents.copilot)
         doc.add("agents", agents)
 
+    default_fetch = FetchPolicy.default_policy()
+    if _fetch_differs(cfg.fetch, default_fetch):
+        ft = tomlkit.table()
+        ft.add("allow_local", cfg.fetch.allow_local)
+        ft.add("allowed_git_hosts", cfg.fetch.allowed_git_hosts)
+        if cfg.fetch.max_total_bytes is not None:
+            ft.add("max_total_bytes", cfg.fetch.max_total_bytes)
+        if cfg.fetch.max_file_count is not None:
+            ft.add("max_file_count", cfg.fetch.max_file_count)
+        doc.add("fetch", ft)
+
     return tomlkit.dumps(doc)
 
 
@@ -91,6 +103,7 @@ def load(path: Path) -> AsmConfig:
     skills_raw = raw.get("skills", {})
     exp_raw = raw.get("expertises", {})
     agents_raw = raw.get("agents", {})
+    fetch_raw = raw.get("fetch")
 
     skills: dict[str, SkillEntry] = {}
     for name, meta in skills_raw.items():
@@ -135,12 +148,43 @@ def load(path: Path) -> AsmConfig:
             codex=agents_raw.get("codex", False),
             copilot=agents_raw.get("copilot", False),
         ),
+        fetch=_parse_fetch(fetch_raw if isinstance(fetch_raw, dict) else None),
     )
 
 
 def save(cfg: AsmConfig, path: Path) -> None:
     """Write config to disk."""
     path.write_text(dump(cfg))
+
+
+def _fetch_differs(a: FetchPolicy, b: FetchPolicy) -> bool:
+    return (
+        a.allow_local != b.allow_local
+        or list(a.allowed_git_hosts) != list(b.allowed_git_hosts)
+        or a.max_total_bytes != b.max_total_bytes
+        or a.max_file_count != b.max_file_count
+    )
+
+
+def _parse_fetch(raw: dict | None) -> FetchPolicy:
+    base = FetchPolicy.default_policy()
+    if not raw:
+        return base
+    if "allow_local" in raw:
+        base.allow_local = bool(raw["allow_local"])
+    hosts = raw.get("allowed_git_hosts")
+    if hosts is not None:
+        if isinstance(hosts, str):
+            parsed = [h.strip() for h in hosts.split(",") if h.strip()]
+        else:
+            parsed = [str(h).strip() for h in hosts if str(h).strip()]
+        if parsed:
+            base.allowed_git_hosts = parsed
+    if raw.get("max_total_bytes") is not None:
+        base.max_total_bytes = int(raw["max_total_bytes"])
+    if raw.get("max_file_count") is not None:
+        base.max_file_count = int(raw["max_file_count"])
+    return base
 
 
 def _policy_to_dict(policy: SkillPolicy) -> dict:

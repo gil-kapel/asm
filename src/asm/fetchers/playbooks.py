@@ -13,7 +13,8 @@ _GITHUB_TREE_RE = re.compile(r"https://github\.com/[^\"' <>()]+/tree/[^\"' <>()]
 def fetch_ref(location: str) -> str:
     """Resolve Playbooks location into a concrete GitHub skill URL."""
     page_url = _to_skill_url(location)
-    resp = httpx.get(page_url, timeout=10.0, follow_redirects=True)
+    with httpx.Client(timeout=10.0, follow_redirects=True, max_redirects=10) as client:
+        resp = client.get(page_url)
     resp.raise_for_status()
     text = resp.text
     match = _GITHUB_TREE_RE.search(text)

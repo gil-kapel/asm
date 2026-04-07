@@ -6,41 +6,19 @@ the entire repository — typically 10-50x faster than a full clone.
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
+from asm.core.models import FetchPolicy
+from asm.fetchers.fetch_policy import parse_github_skill_ref
+from asm.fetchers.safe_tree import copy_skill_tree
 
-def parse_ref(raw: str) -> tuple[str, str, str]:
-    """Parse a GitHub reference into (repo_url, branch, subpath).
 
-    Supports:
-      https://github.com/user/repo/tree/branch/path
-      user/repo/path
-      user/repo
-    """
-    full = re.match(
-        r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?"
-        r"(?:/tree/([^/]+)(?:/(.+))?)?$",
-        raw,
-    )
-    if full:
-        user, repo, branch, subpath = full.groups()
-        return (
-            f"https://github.com/{user}/{repo}.git",
-            branch or "main",
-            subpath or "",
-        )
-
-    parts = raw.split("/")
-    if len(parts) >= 2:
-        user, repo = parts[0], parts[1]
-        subpath = "/".join(parts[2:]) if len(parts) > 2 else ""
-        return f"https://github.com/{user}/{repo}.git", "main", subpath
-
-    raise ValueError(f"Cannot parse GitHub reference: {raw}")
+def parse_ref(raw: str, policy: FetchPolicy) -> tuple[str, str, str]:
+    """Parse a GitHub (or allowed-host) reference into (repo_url, branch, subpath)."""
+    return parse_github_skill_ref(raw, policy)
 
 
 def _run(args: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -81,13 +59,13 @@ def _shallow_clone(repo_url: str, branch: str, tmp_repo: Path) -> None:
         raise RuntimeError(f"git clone failed: {r.stderr.strip()}")
 
 
-def fetch(raw: str, dest: Path) -> str:
-    """Clone a skill from GitHub. Returns the commit hash.
+def fetch(raw: str, dest: Path, *, policy: FetchPolicy) -> str:
+    """Clone a skill from GitHub (or an allowed host). Returns the commit hash.
 
     Uses sparse checkout when a subpath is specified — only downloads
     the blobs for the needed directory.
     """
-    repo_url, branch, subpath = parse_ref(raw)
+    repo_url, branch, subpath = parse_github_skill_ref(raw, policy)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_repo = Path(tmp) / "repo"
@@ -103,7 +81,7 @@ def fetch(raw: str, dest: Path) -> str:
 
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(source, dest)
+        copy_skill_tree(source, dest, policy)
 
         git_dir = dest / ".git"
         if git_dir.exists():

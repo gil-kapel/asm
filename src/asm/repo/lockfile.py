@@ -7,6 +7,7 @@ Analogous to package-lock.json but for agent skills.
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,10 +23,20 @@ DEFAULT_REGISTRY_ID = "default"
 def compute_integrity(skill_dir: Path) -> str:
     """SHA-256 over sorted file paths + contents for deterministic hashing."""
     hasher = hashlib.sha256()
-    for path in sorted(skill_dir.rglob("*")):
-        if path.is_file():
-            hasher.update(path.relative_to(skill_dir).as_posix().encode())
-            hasher.update(path.read_bytes())
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(skill_dir, topdown=True, followlinks=False):
+        dirnames.sort()
+        base = Path(dirpath)
+        for name in sorted(filenames):
+            path = base / name
+            if path.is_symlink():
+                continue
+            if path.is_file():
+                files.append(path)
+    files.sort(key=lambda p: p.relative_to(skill_dir).as_posix())
+    for path in files:
+        hasher.update(path.relative_to(skill_dir).as_posix().encode())
+        hasher.update(path.read_bytes())
     return f"sha256:{hasher.hexdigest()}"
 
 
