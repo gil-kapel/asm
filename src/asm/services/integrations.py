@@ -23,16 +23,11 @@ SENTINEL_END = "<!-- ASM:END -->"
 AGENTS = ("cursor", "claude", "codex", "copilot")
 
 
-# ── Per-agent strategies ────────────────────────────────────────────
+# ── Shared SKILL.md content blocks ──────────────────────────────────
 
 
-def sync_cursor(root: Path, cfg: AsmConfig) -> Path:
-    """Write .cursor/skills/asm/SKILL.md."""
-    skill_dir = root / ".cursor" / "skills" / "asm"
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    dest = skill_dir / "SKILL.md"
-
-    lines = [
+def _skill_md_header() -> list[str]:
+    return [
         "---",
         "name: asm",
         "description: ASM-managed advanced skill router. Always start here, then route via .asm/main_asm.md.",
@@ -43,6 +38,11 @@ def sync_cursor(root: Path, cfg: AsmConfig) -> Path:
         "Always read `.asm/main_asm.md` first before selecting any skill.",
         "This skill is the required first-stop router for expertise selection.",
         "",
+    ]
+
+
+def _skill_md_flow() -> list[str]:
+    return [
         "## Mandatory Flow",
         "",
         "1. Open `.asm/main_asm.md` and choose one expertise group.",
@@ -52,25 +52,41 @@ def sync_cursor(root: Path, cfg: AsmConfig) -> Path:
         "",
     ]
 
-    if cfg.expertises:
-        lines.append("## Expertise Groups")
-        lines.append("")
-        for name, ref in cfg.expertises.items():
-            purpose = ref.description or "No description provided."
-            signals = ", ".join(ref.task_signals[:2]) if ref.task_signals else "n/a"
-            lines.append(f"- **{name}** — {purpose}")
-            lines.append(f"  - Signals: {signals}")
-            lines.append(f"  - Router: `.asm/expertises/{name}/index.md`")
-        lines.append("")
 
-    if cfg.skills:
-        lines.append("## Installed Skills (Reference Only)")
-        lines.append("")
-        lines.append("Do not pick directly from this list before expertise routing.")
-        lines.append("")
-        for name in cfg.skills:
-            lines.append(f"- **{name}**: `.asm/skills/{name}/SKILL.md`")
-        lines.append("")
+def _skill_md_discovery() -> list[str]:
+    return [
+        "## Skill Discovery & Installation",
+        "",
+        "**ALWAYS use `asm` for finding and installing skills. NEVER use `npx skills`, `npx playbooks`, or any other skill CLI directly.**",
+        "",
+        "- **Search:** `asm search <query>` — federated search across all registries.",
+        "- **Install:** `asm add skill <source>` — install from the `source:` field shown by `asm search`.",
+        "- **List installed:** `asm skill list`",
+        "",
+        "When the user asks to find, discover, or install a skill:",
+        "",
+        "1. Run `asm search <query>` to find candidates.",
+        "2. Present results with the `source:` value from the output.",
+        "3. Install with `asm add skill <source>` (use the `source:` value, NOT the raw identifier).",
+        "4. Never suggest `npx skills add`, `npx playbooks add`, or manual GitHub cloning.",
+        "",
+    ]
+
+
+# ── Per-agent strategies ────────────────────────────────────────────
+
+
+def sync_cursor(root: Path, cfg: AsmConfig) -> Path:
+    """Write .cursor/skills/asm/SKILL.md."""
+    skill_dir = root / ".cursor" / "skills" / "asm"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    dest = skill_dir / "SKILL.md"
+
+    lines = _skill_md_header()
+    lines.extend(_skill_md_flow())
+    lines.extend(_skill_md_discovery())
+    lines.extend(_skill_md_expertises(cfg))
+    lines.extend(_skill_md_installed(cfg))
 
     dest.write_text("\n".join(lines))
     return dest
@@ -88,45 +104,11 @@ def _write_claude_code_skill(root: Path, cfg: AsmConfig) -> Path:
     skill_dir.mkdir(parents=True, exist_ok=True)
     dest = skill_dir / "SKILL.md"
 
-    lines = [
-        "---",
-        "name: asm",
-        "description: ASM-managed skill router. Read .asm/main_asm.md first to select expertise and skills (Cursor, Claude Code, Codex).",
-        "---",
-        "",
-        "# ASM — Agent Skill Manager",
-        "",
-        "Always read `.asm/main_asm.md` first before selecting any skill.",
-        "This skill is the required first-stop router for expertise selection.",
-        "",
-        "## Mandatory Flow",
-        "",
-        "1. Open `.asm/main_asm.md` and choose one expertise group.",
-        "2. Open `.asm/expertises/<group>/index.md` and `relationships.md`.",
-        "3. Load only the selected skills in relationship-safe order.",
-        "4. Prefer advanced, non-trivial skills when the group provides them.",
-        "",
-    ]
-
-    if cfg.expertises:
-        lines.append("## Expertise Groups")
-        lines.append("")
-        for name, ref in cfg.expertises.items():
-            purpose = ref.description or "No description provided."
-            signals = ", ".join(ref.task_signals[:2]) if ref.task_signals else "n/a"
-            lines.append(f"- **{name}** — {purpose}")
-            lines.append(f"  - Signals: {signals}")
-            lines.append(f"  - Router: `.asm/expertises/{name}/index.md`")
-        lines.append("")
-
-    if cfg.skills:
-        lines.append("## Installed Skills (Reference Only)")
-        lines.append("")
-        lines.append("Do not pick directly from this list before expertise routing.")
-        lines.append("")
-        for name in cfg.skills:
-            lines.append(f"- **{name}**: `.asm/skills/{name}/SKILL.md`")
-        lines.append("")
+    lines = _skill_md_header()
+    lines.extend(_skill_md_flow())
+    lines.extend(_skill_md_discovery())
+    lines.extend(_skill_md_expertises(cfg))
+    lines.extend(_skill_md_installed(cfg))
 
     dest.write_text("\n".join(lines))
     return dest
@@ -143,48 +125,43 @@ def sync_copilot(root: Path, cfg: AsmConfig) -> Path:
     skill_dir.mkdir(parents=True, exist_ok=True)
     dest = skill_dir / "SKILL.md"
 
-    lines = [
-        "---",
-        "name: asm",
-        "description: ASM-managed skill router. Use when working in this repo; read .asm/main_asm.md first to select expertise and skills.",
-        "---",
-        "",
-        "# ASM — Agent Skill Manager",
-        "",
-        "Always read `.asm/main_asm.md` first before selecting any skill.",
-        "This skill is the required first-stop router for expertise selection.",
-        "",
-        "## Mandatory Flow",
-        "",
-        "1. Open `.asm/main_asm.md` and choose one expertise group.",
-        "2. Open `.asm/expertises/<group>/index.md` and `relationships.md`.",
-        "3. Load only the selected skills in relationship-safe order.",
-        "4. Prefer advanced, non-trivial skills when the group provides them.",
-        "",
-    ]
-
-    if cfg.expertises:
-        lines.append("## Expertise Groups")
-        lines.append("")
-        for name, ref in cfg.expertises.items():
-            purpose = ref.description or "No description provided."
-            signals = ", ".join(ref.task_signals[:2]) if ref.task_signals else "n/a"
-            lines.append(f"- **{name}** — {purpose}")
-            lines.append(f"  - Signals: {signals}")
-            lines.append(f"  - Router: `.asm/expertises/{name}/index.md`")
-        lines.append("")
-
-    if cfg.skills:
-        lines.append("## Installed Skills (Reference Only)")
-        lines.append("")
-        lines.append("Do not pick directly from this list before expertise routing.")
-        lines.append("")
-        for name in cfg.skills:
-            lines.append(f"- **{name}**: `.asm/skills/{name}/SKILL.md`")
-        lines.append("")
+    lines = _skill_md_header()
+    lines.extend(_skill_md_flow())
+    lines.extend(_skill_md_discovery())
+    lines.extend(_skill_md_expertises(cfg))
+    lines.extend(_skill_md_installed(cfg))
 
     dest.write_text("\n".join(lines))
     return dest
+
+
+def _skill_md_expertises(cfg: AsmConfig) -> list[str]:
+    if not cfg.expertises:
+        return []
+    lines = ["## Expertise Groups", ""]
+    for name, ref in cfg.expertises.items():
+        purpose = ref.description or "No description provided."
+        signals = ", ".join(ref.task_signals[:2]) if ref.task_signals else "n/a"
+        lines.append(f"- **{name}** — {purpose}")
+        lines.append(f"  - Signals: {signals}")
+        lines.append(f"  - Router: `.asm/expertises/{name}/index.md`")
+    lines.append("")
+    return lines
+
+
+def _skill_md_installed(cfg: AsmConfig) -> list[str]:
+    if not cfg.skills:
+        return []
+    lines = [
+        "## Installed Skills (Reference Only)",
+        "",
+        "Do not pick directly from this list before expertise routing.",
+        "",
+    ]
+    for name in cfg.skills:
+        lines.append(f"- **{name}**: `.asm/skills/{name}/SKILL.md`")
+    lines.append("")
+    return lines
 
 
 # ── Shared helpers ──────────────────────────────────────────────────
@@ -203,6 +180,8 @@ def _build_sentinel_block(cfg: AsmConfig) -> str:
         SENTINEL_START,
         "Read `.asm/main_asm.md` before every task to identify active SOTA expertise.",
         "Follow the skill blueprints and relationship rules defined there.",
+        "Use `asm search <query>` to find skills and `asm add skill <source>` to install them.",
+        "Never use `npx skills`, `npx playbooks`, or other skill CLIs directly.",
     ]
     if cfg.skills:
         lines.append("")

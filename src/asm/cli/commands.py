@@ -158,12 +158,13 @@ def search(query: str, limit: int, root: str) -> None:
         click.echo("  Try broader keywords: 'python auth', 'react forms', or 'sql optimization'.")
         return
 
-    click.echo(f"Found {len(results)} result(s):")
+    click.echo(f"Found {len(results)} result(s):\n")
     for idx, item in enumerate(results, start=1):
         click.echo(f"{idx}. [{item.provider}] {item.name}")
         click.echo(f"   id: {item.identifier}")
         click.echo(f"   url: {item.url}")
         click.echo(f"   source: {item.install_source}")
+        click.echo(f"   install: asm add skill {item.install_source}")
         click.echo(f"   {item.description}")
 
 
