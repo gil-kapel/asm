@@ -97,6 +97,7 @@ def test_main_router_and_cursor_entry_generation(tmp_path: Path) -> None:
 
     rendered = render_main_asm(cfg)
     assert "## Routing Protocol (Mandatory)" in rendered
+    assert "asm search" in rendered
     assert "## Expertise Group Router" in rendered
     assert "## Selection Rubric" in rendered
     assert "Advanced skills:" in rendered

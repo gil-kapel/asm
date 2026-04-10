@@ -16,6 +16,7 @@ def render_main_asm(cfg: AsmConfig) -> str:
         "",
         "## Routing Protocol (Mandatory)",
         "",
+        "0. To search for new skills in the registry, run `asm search <query>` (semantic / LLM-based search).",
         "1. Start from `.cursor/skills/asm/SKILL.md`, then read this file.",
         "2. Select one expertise group using the routing rubric below.",
         "3. Open the group index and relationships docs before loading any skill.",
