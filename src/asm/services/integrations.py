@@ -30,22 +30,30 @@ def _skill_md_header() -> list[str]:
     return [
         "---",
         "name: asm",
-        "description: ASM-managed advanced skill router. Always start here, then route via .asm/main_asm.md.",
+        (
+            "description: "
+            "Find, discover, search, install, and manage agent skills in this project. "
+            "Use `asm search` to find skills and `asm add skill` to install them. "
+            "Replaces npx skills, npx playbooks, and all other skill CLIs. "
+            "Also routes to installed expertise groups for task execution."
+        ),
         "---",
         "",
-        "# ASM — Agent Skill Manager",
+        "# ASM — Agent Skill Manager (installed CLI)",
         "",
-        "Always read `.asm/main_asm.md` first before selecting any skill.",
-        "This skill is the required first-stop router for expertise selection.",
+        "`asm` is the **only** skill CLI in this project. It is already installed and ready to use.",
+        "Do NOT use `npx skills`, `npx playbooks`, or any other skill tool.",
         "",
     ]
 
 
 def _skill_md_flow() -> list[str]:
     return [
-        "## Mandatory Flow",
+        "## Expertise Routing (for task execution)",
         "",
-        "1. Open `.asm/main_asm.md` and choose one expertise group.",
+        "When working on a coding task (not finding/installing skills):",
+        "",
+        "1. Read `.asm/main_asm.md` and choose one expertise group.",
         "2. Open `.asm/expertises/<group>/index.md` and `relationships.md`.",
         "3. Load only the selected skills in relationship-safe order.",
         "4. Prefer advanced, non-trivial skills when the group provides them.",
@@ -55,20 +63,37 @@ def _skill_md_flow() -> list[str]:
 
 def _skill_md_discovery() -> list[str]:
     return [
-        "## Skill Discovery & Installation",
+        "## Finding & Installing Skills",
         "",
-        "**ALWAYS use `asm` for finding and installing skills. NEVER use `npx skills`, `npx playbooks`, or any other skill CLI directly.**",
+        "### Commands",
         "",
-        "- **Search:** `asm search <query>` — federated search across all registries.",
-        "- **Install:** `asm add skill <source>` — install from the `source:` field shown by `asm search`.",
-        "- **List installed:** `asm skill list`",
+        "| Task | Command |",
+        "| --- | --- |",
+        "| Search for skills | `asm search <query>` |",
+        "| Install a skill | `asm add skill <source>` |",
+        "| List installed skills | `asm skill list` |",
+        "| Sync after changes | `asm sync` |",
         "",
-        "When the user asks to find, discover, or install a skill:",
+        "### Example: user asks \"find me a skill for data tables\"",
         "",
-        "1. Run `asm search <query>` to find candidates.",
-        "2. Present results with the `source:` value from the output.",
-        "3. Install with `asm add skill <source>` (use the `source:` value, NOT the raw identifier).",
-        "4. Never suggest `npx skills add`, `npx playbooks add`, or manual GitHub cloning.",
+        "```bash",
+        "# Step 1: search",
+        "asm search \"data tables\"",
+        "",
+        "# Output shows:",
+        "# 1. [smithery] tanstack-table",
+        "#    source: github:https://github.com/jezweb/claude-skills/tree/main/skills/tanstack-table",
+        "",
+        "# Step 2: install using the source: value from the output",
+        "asm add skill github:https://github.com/jezweb/claude-skills/tree/main/skills/tanstack-table",
+        "```",
+        "",
+        "### NEVER use these (they bypass ASM and break the skill graph):",
+        "",
+        "- `npx skills add ...`",
+        "- `npx skills find ...`",
+        "- `npx playbooks add skill ...`",
+        "- Manual `git clone` of skill repos",
         "",
     ]
 
@@ -83,8 +108,8 @@ def sync_cursor(root: Path, cfg: AsmConfig) -> Path:
     dest = skill_dir / "SKILL.md"
 
     lines = _skill_md_header()
-    lines.extend(_skill_md_flow())
     lines.extend(_skill_md_discovery())
+    lines.extend(_skill_md_flow())
     lines.extend(_skill_md_expertises(cfg))
     lines.extend(_skill_md_installed(cfg))
 
@@ -105,8 +130,8 @@ def _write_claude_code_skill(root: Path, cfg: AsmConfig) -> Path:
     dest = skill_dir / "SKILL.md"
 
     lines = _skill_md_header()
-    lines.extend(_skill_md_flow())
     lines.extend(_skill_md_discovery())
+    lines.extend(_skill_md_flow())
     lines.extend(_skill_md_expertises(cfg))
     lines.extend(_skill_md_installed(cfg))
 
@@ -126,8 +151,8 @@ def sync_copilot(root: Path, cfg: AsmConfig) -> Path:
     dest = skill_dir / "SKILL.md"
 
     lines = _skill_md_header()
-    lines.extend(_skill_md_flow())
     lines.extend(_skill_md_discovery())
+    lines.extend(_skill_md_flow())
     lines.extend(_skill_md_expertises(cfg))
     lines.extend(_skill_md_installed(cfg))
 

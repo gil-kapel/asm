@@ -96,15 +96,17 @@ def test_main_router_and_cursor_entry_generation(tmp_path: Path) -> None:
     cfg = _sample_config()
 
     rendered = render_main_asm(cfg)
-    assert "## Routing Protocol (Mandatory)" in rendered
+    assert "## Finding & Installing Skills" in rendered
     assert "asm search" in rendered
+    assert "asm add skill" in rendered
     assert "## Expertise Group Router" in rendered
     assert "## Selection Rubric" in rendered
     assert "Advanced skills:" in rendered
 
     out = integrations.sync_cursor(tmp_path, cfg)
     cursor_md = out.read_text(encoding="utf-8")
-    assert "## Mandatory Flow" in cursor_md
+    assert "## Finding & Installing Skills" in cursor_md
+    assert "## Expertise Routing" in cursor_md
     assert "## Expertise Groups" in cursor_md
     assert "Do not pick directly from this list before expertise routing." in cursor_md
 
