@@ -63,21 +63,38 @@ def fetch(raw: str, dest: Path, *, policy: FetchPolicy) -> str:
     """Clone a skill from GitHub (or an allowed host). Returns the commit hash.
 
     Uses sparse checkout when a subpath is specified — only downloads
-    the blobs for the needed directory.
+    the blobs for the needed directory. Falls back to the repo's default
+    branch when the requested branch doesn't exist.
     """
     repo_url, branch, subpath = parse_github_skill_ref(raw, policy)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_repo = Path(tmp) / "repo"
 
-        if subpath:
-            _sparse_clone(repo_url, branch, subpath, tmp_repo)
-        else:
-            _shallow_clone(repo_url, branch, tmp_repo)
+        try:
+            if subpath:
+                _sparse_clone(repo_url, branch, subpath, tmp_repo)
+            else:
+                _shallow_clone(repo_url, branch, tmp_repo)
+        except RuntimeError as exc:
+            if "not found" not in str(exc).lower() or branch == "HEAD":
+                raise
+            if tmp_repo.exists():
+                shutil.rmtree(tmp_repo)
+            fallback = "HEAD"
+            if subpath:
+                _sparse_clone(repo_url, fallback, subpath, tmp_repo)
+            else:
+                _shallow_clone(repo_url, fallback, tmp_repo)
 
         source = tmp_repo / subpath if subpath else tmp_repo
         if not source.exists():
-            raise FileNotFoundError(f"Path '{subpath}' not found in {repo_url}")
+            alt = f"skills/{subpath}" if subpath and not subpath.startswith("skills/") else ""
+            hint = f"\nThe skill may be at a different path. Try: {repo_url.replace('.git', '')}" if not alt else (
+                f"\nTry with the 'skills/' prefix: "
+                f"{repo_url.replace('.git', '')}/tree/{branch}/{alt}"
+            )
+            raise FileNotFoundError(f"Path '{subpath}' not found in {repo_url}{hint}")
 
         if dest.exists():
             shutil.rmtree(dest)

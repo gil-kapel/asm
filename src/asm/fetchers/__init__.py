@@ -25,6 +25,8 @@ def parse_source(raw: str) -> tuple[str, str]:
         return "smithery", raw
     if "playbooks.com/skills/" in raw:
         return "playbooks", raw
+    if "skills.sh/" in raw:
+        return "skills.sh", raw
     if raw.startswith("sm:"):
         return "smithery", raw[3:]
     if raw.startswith("pb:"):
@@ -44,6 +46,36 @@ def parse_source(raw: str) -> tuple[str, str]:
     if "github.com" in raw:
         return "github", raw
     return "github", raw
+
+
+def _resolve_skills_sh(url: str) -> str:
+    """Resolve a skills.sh URL to a GitHub URL by following its redirect."""
+    import httpx
+
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=False) as client:
+            resp = client.head(url)
+            location = resp.headers.get("location", "")
+            if "github.com" in location:
+                return location
+            resp = client.get(url, follow_redirects=True)
+            final = str(resp.url)
+            if "github.com" in final:
+                return final
+    except Exception:
+        pass
+
+    # Fallback: parse owner/repo/skill from the URL path
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(parts) >= 3:
+        owner, repo, skill = parts[0], parts[1], "/".join(parts[2:])
+        return f"https://github.com/{owner}/{repo}/tree/HEAD/{skill}"
+    if len(parts) >= 2:
+        return f"https://github.com/{parts[0]}/{parts[1]}"
+    raise ValueError(f"Cannot resolve skills.sh URL: {url}")
 
 
 def _resolve_policy(root: Path | None, policy: FetchPolicy | None) -> FetchPolicy:
@@ -75,6 +107,15 @@ def fetch(
     if source_type == "local":
         local.fetch(location, dest, root=root, policy=pol)
         return {}
+
+    if source_type == "skills.sh":
+        gh_ref = _resolve_skills_sh(location)
+        commit = github.fetch(gh_ref, dest, policy=pol)
+        repo_url, branch, subpath = github.parse_ref(gh_ref, pol)
+        resolved = repo_url.replace(".git", "") + f"/tree/{branch}"
+        if subpath:
+            resolved += f"/{subpath}"
+        return {"commit": commit, "resolved": resolved}
 
     if source_type == "github":
         commit = github.fetch(location, dest, policy=pol)

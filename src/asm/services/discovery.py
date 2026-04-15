@@ -431,7 +431,7 @@ def _search_skills_cli(client: httpx.Client, query: str) -> list[DiscoveryItem]:
                 i += 1
         if not url:
             url = f"https://skills.sh/{identifier.replace('@', '/')}"
-        install_source = _skills_cli_to_github_source(identifier)
+        install_source = _skills_cli_to_install_source(identifier, url)
         desc = f"skills.sh • {identifier}"
         if stars is not None:
             desc += f" • installs: {stars}"
@@ -453,17 +453,19 @@ def _search_skills_cli(client: httpx.Client, query: str) -> list[DiscoveryItem]:
     return out
 
 
-def _skills_cli_to_github_source(identifier: str) -> str:
-    """Convert a skills.sh identifier (owner/repo@skill) to a GitHub source URL.
+def _skills_cli_to_install_source(identifier: str, url: str) -> str:
+    """Build an install source for a skills.sh result.
 
-    Falls back to the skills.sh URL when the identifier can't be parsed.
+    We cannot reliably guess the GitHub branch (main vs master) or directory
+    structure (skills/<name> vs <name> vs something else) from a skills.sh
+    identifier alone. Use the skills.sh URL which `asm add skill` can resolve
+    via redirect, or fall back to the identifier if no URL is available.
     """
+    if url and "skills.sh/" in url:
+        return url
     if "@" not in identifier:
         return f"https://skills.sh/{identifier}"
-    repo_part, skill_name = identifier.rsplit("@", 1)
-    if "/" not in repo_part:
-        return f"https://skills.sh/{identifier.replace('@', '/')}"
-    return f"github:https://github.com/{repo_part}/tree/main/skills/{skill_name}"
+    return f"https://skills.sh/{identifier.replace('@', '/')}"
 
 
 def _parse_skills_installs(num_str: str | None, scale: str | None) -> int | None:
